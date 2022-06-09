@@ -1,0 +1,21 @@
+package com.translnd.htlc.db
+
+import org.bitcoins.core.protocol.ln._
+import org.bitcoins.core.protocol.ln.currency._
+import slick.jdbc.JdbcProfile
+
+import java.util.UUID
+
+class DbMappers(val profile: JdbcProfile) {
+
+  import profile.api._
+
+  implicit val PaymentSecretMapper: BaseColumnType[PaymentSecret] =
+    MappedColumnType.base[PaymentSecret, String](_.hex, PaymentSecret.fromHex)
+
+  implicit val MilliSatoshisMapper: BaseColumnType[MilliSatoshis] =
+    MappedColumnType.base[MilliSatoshis, Long](_.toLong, MilliSatoshis.apply(_))
+
+  implicit val UUIDMapper: BaseColumnType[UUID] =
+    MappedColumnType.base[UUID, String](_.toString, UUID.fromString)
+}
