@@ -129,48 +129,50 @@ class HTLCInterceptor(val lnd: LndRpcClient)(implicit conf: TransLndAppConfig)
             queue.offer(resp)
           case Some(db) =>
             val priv = keyManager.getKey(db.index)
-            val onion = SphinxOnionDecoder.decode(request.onionBlob)
-            val (resp, updatedDb) =
-              Sphinx.peel(priv, Some(hash), onion) match {
-                case Failure(err) =>
-                  err.printStackTrace()
-                  val resp = ForwardHtlcInterceptResponse(
-                    incomingCircuitKey = request.incomingCircuitKey,
-                    action = FAIL)
-                  (resp, db)
-                case Success(decrypted) =>
-                  if (!decrypted.isLastPacket) {
-                    println("DID NOT GET LAST PACKET")
-                  }
+            val onionT = SphinxOnionDecoder.decodeT(request.onionBlob)
 
-                  val action =
-                    db.getAction(request, decrypted.finalHopTLVStream)
+            val decryptedT = onionT.flatMap(Sphinx.peel(priv, Some(hash), _))
 
-                  val resp = action match {
-                    case SETTLE =>
-                      ForwardHtlcInterceptResponse(incomingCircuitKey =
-                                                     request.incomingCircuitKey,
-                                                   action = SETTLE,
-                                                   preimage = db.preimage)
-                    case action @ (FAIL | RESUME) =>
-                      ForwardHtlcInterceptResponse(incomingCircuitKey =
-                                                     request.incomingCircuitKey,
-                                                   action = action)
-                    case action: Unrecognized =>
-                      ForwardHtlcInterceptResponse(incomingCircuitKey =
-                                                     request.incomingCircuitKey,
-                                                   action = action,
-                                                   preimage = db.preimage)
-                  }
+            val (resp, updatedDb) = decryptedT match {
+              case Failure(err) =>
+                err.printStackTrace()
+                val resp = ForwardHtlcInterceptResponse(
+                  incomingCircuitKey = request.incomingCircuitKey,
+                  action = FAIL)
+                (resp, db)
+              case Success(decrypted) =>
+                if (!decrypted.isLastPacket) {
+                  println("DID NOT GET LAST PACKET")
+                }
 
-                  val updatedDb = action match {
-                    case SETTLE          => db.copy(settled = true)
-                    case FAIL | RESUME   => db
-                    case _: Unrecognized => db
-                  }
+                val action =
+                  db.getAction(request, decrypted.finalHopTLVStream)
 
-                  (resp, updatedDb)
-              }
+                val resp = action match {
+                  case SETTLE =>
+                    ForwardHtlcInterceptResponse(incomingCircuitKey =
+                                                   request.incomingCircuitKey,
+                                                 action = SETTLE,
+                                                 preimage = db.preimage)
+                  case action @ (FAIL | RESUME) =>
+                    ForwardHtlcInterceptResponse(incomingCircuitKey =
+                                                   request.incomingCircuitKey,
+                                                 action = action)
+                  case action: Unrecognized =>
+                    ForwardHtlcInterceptResponse(incomingCircuitKey =
+                                                   request.incomingCircuitKey,
+                                                 action = action,
+                                                 preimage = db.preimage)
+                }
+
+                val updatedDb = action match {
+                  case SETTLE          => db.copy(settled = true)
+                  case FAIL | RESUME   => db
+                  case _: Unrecognized => db
+                }
+
+                (resp, updatedDb)
+            }
 
             queue
               .offer(resp)

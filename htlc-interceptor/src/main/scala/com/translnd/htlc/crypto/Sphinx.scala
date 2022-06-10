@@ -20,8 +20,8 @@ object Sphinx extends Logging {
   // We use HMAC-SHA256 which returns 32-bytes message authentication codes.
   val MacLength = 32
 
-  def mac(key: ByteVector, message: ByteVector): ByteVector =
-    Mac32.hmac256(key, message)
+  def mac(key: ByteVector, message: ByteVector): Sha256Digest =
+    Sha256Digest(Mac32.hmac256(key, message))
 
   def generateKey(keyType: ByteVector, secret: ByteVector): ByteVector =
     Mac32.hmac256(keyType, secret)
@@ -124,7 +124,7 @@ object Sphinx extends Logging {
       payload: ByteVector,
       nextPacket: OnionRoutingPacket,
       sharedSecret: ByteVector) {
-    val isLastPacket: Boolean = nextPacket.hmac == ByteVector.low(32)
+    val isLastPacket: Boolean = nextPacket.hmac == Sha256Digest.empty
 
     lazy val tlvStream: Vector[TLV] = {
       val totalSize = BigSizeUInt.fromBytes(payload)
@@ -241,12 +241,12 @@ object Sphinx extends Logging {
                                 OnionRoutingPacket(Version,
                                                    nextPubKey,
                                                    nextOnionPayload,
-                                                   hmac),
+                                                   Sha256Digest(hmac)),
                                 sharedSecret))
             } else {
               Failure(
                 new RuntimeException(
-                  s"Invalid onion hmac: $check != ${packet.hmac}"))
+                  s"Invalid onion hmac: ${check.hex} != ${packet.hmac.hex}"))
             }
           case Failure(_) => Failure(new RuntimeException("Invalid onion key"))
         }
@@ -284,15 +284,16 @@ object Sphinx extends Logging {
       payload.length <= packetPayloadLength - MacLength,
       s"packet per-hop payload cannot exceed ${packetPayloadLength - MacLength} bytes")
 
-    val (currentMac, currentPayload): (ByteVector, ByteVector) =
+    val (currentMac, currentPayload): (Sha256Digest, ByteVector) =
       packet match {
         // Packet construction starts with an empty mac and random payload.
-        case Left(startingBytes) => (ByteVector.low(32), startingBytes)
+        case Left(startingBytes) => (Sha256Digest.empty, startingBytes)
         case Right(p)            => (p.hmac, p.payload)
       }
     val nextOnionPayload = {
-      val onionPayload1 = payload ++ currentMac ++ currentPayload.dropRight(
-        payload.length + MacLength)
+      val onionPayload1 =
+        payload ++ currentMac.bytes ++ currentPayload.dropRight(
+          payload.length + MacLength)
       val onionPayload2 =
         onionPayload1 xor generateStream(generateKey("rho", sharedSecret),
                                          packetPayloadLength)

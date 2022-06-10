@@ -63,22 +63,20 @@ class SphinxSpec extends AnyFunSuite {
 
     val packets =
       Seq(nextPacket0, nextPacket1, nextPacket2, nextPacket3, nextPacket4)
-    assert(
-      packets.head.hmac ==
-        hex"a93aa4f40241cef3e764e24b28570a0db39af82ab5102c3a04e51bec8cca9394")
-    assert(
-      packets(1).hmac ==
-        hex"5d1b11f1efeaa9be32eb1c74b113c0b46f056bb49e2a35a51ceaece6bd31332c")
-    assert(
-      packets(2).hmac ==
-        hex"19ca6357b5552b28e50ae226854eec874bbbf7025cf290a34c06b4eff5d2bac0")
-    assert(
-      packets(3).hmac ==
-        hex"16d4553c6084b369073d259381bb5b02c16bb2c590bbd9e69346cf7ebd563229")
+    assert(packets.head.hmac ==
+      Sha256Digest(
+        hex"a93aa4f40241cef3e764e24b28570a0db39af82ab5102c3a04e51bec8cca9394"))
+    assert(packets(1).hmac ==
+      Sha256Digest(
+        hex"5d1b11f1efeaa9be32eb1c74b113c0b46f056bb49e2a35a51ceaece6bd31332c"))
+    assert(packets(2).hmac ==
+      Sha256Digest(
+        hex"19ca6357b5552b28e50ae226854eec874bbbf7025cf290a34c06b4eff5d2bac0"))
+    assert(packets(3).hmac ==
+      Sha256Digest(
+        hex"16d4553c6084b369073d259381bb5b02c16bb2c590bbd9e69346cf7ebd563229"))
     // this means that node #4 is the last node
-    assert(
-      packets(4).hmac ==
-        hex"0000000000000000000000000000000000000000000000000000000000000000")
+    assert(packets(4).hmac == Sha256Digest.empty)
   }
 
   test(
@@ -115,21 +113,19 @@ class SphinxSpec extends AnyFunSuite {
 
     val packets =
       Seq(nextPacket0, nextPacket1, nextPacket2, nextPacket3, nextPacket4)
-    assert(
-      packets.head.hmac ==
-        hex"4ecb91c341543953a34d424b64c36a9cd8b4b04285b0c8de0acab0b6218697fc")
-    assert(
-      packets(1).hmac ==
-        hex"3d8e429a1e8d7bdb2813cd491f17771aa75670d88b299db1954aa015d035408f")
-    assert(
-      packets(2).hmac ==
-        hex"30ad58843d142609ed7ae2b960c8ce0e331f7d45c7d705f67fd3f3978cd7b8f8")
-    assert(
-      packets(3).hmac ==
-        hex"4ee0600ee609f1f3356b85b0af8ead34c2db4ae93e3978d15f983040e8b01acd")
-    assert(
-      packets(4).hmac ==
-        hex"0000000000000000000000000000000000000000000000000000000000000000")
+    assert(packets.head.hmac ==
+      Sha256Digest(
+        hex"4ecb91c341543953a34d424b64c36a9cd8b4b04285b0c8de0acab0b6218697fc"))
+    assert(packets(1).hmac ==
+      Sha256Digest(
+        hex"3d8e429a1e8d7bdb2813cd491f17771aa75670d88b299db1954aa015d035408f"))
+    assert(packets(2).hmac ==
+      Sha256Digest(
+        hex"30ad58843d142609ed7ae2b960c8ce0e331f7d45c7d705f67fd3f3978cd7b8f8"))
+    assert(packets(3).hmac ==
+      Sha256Digest(
+        hex"4ee0600ee609f1f3356b85b0af8ead34c2db4ae93e3978d15f983040e8b01acd"))
+    assert(packets(4).hmac == Sha256Digest.empty)
   }
 
   test("create payment packet with variable-size payloads filling the onion") {
@@ -166,15 +162,18 @@ class SphinxSpec extends AnyFunSuite {
     val packets =
       Seq(nextPacket0, nextPacket1, nextPacket2, nextPacket3, nextPacket4)
     assert(
-      packets.head.hmac == hex"859cd694cf604442547246f4fae144f255e71e30cb366b9775f488cac713f0db")
-    assert(packets(
-      1).hmac == hex"259982a8af80bd3b8018443997fa5f74c48b488fff62e531be54b887d53fe0ac")
-    assert(packets(
-      2).hmac == hex"58110c95368305b73ae15d22b884fda0482c60993d3ba4e506e37ff5021efb13")
-    assert(packets(
-      3).hmac == hex"f45e7099e32b8973f54cbfd1f6c48e7e0b90718ad7b00a88e1e98cebeb6d3916")
-    assert(packets(
-      4).hmac == hex"0000000000000000000000000000000000000000000000000000000000000000")
+      packets.head.hmac == Sha256Digest(
+        hex"859cd694cf604442547246f4fae144f255e71e30cb366b9775f488cac713f0db"))
+    assert(
+      packets(1).hmac == Sha256Digest(
+        hex"259982a8af80bd3b8018443997fa5f74c48b488fff62e531be54b887d53fe0ac"))
+    assert(
+      packets(2).hmac == Sha256Digest(
+        hex"58110c95368305b73ae15d22b884fda0482c60993d3ba4e506e37ff5021efb13"))
+    assert(
+      packets(3).hmac == Sha256Digest(
+        hex"f45e7099e32b8973f54cbfd1f6c48e7e0b90718ad7b00a88e1e98cebeb6d3916"))
+    assert(packets(4).hmac == Sha256Digest.empty)
   }
 
   test(
@@ -188,8 +187,7 @@ class SphinxSpec extends AnyFunSuite {
     val Success(DecryptedPacket(payload, nextPacket, _)) =
       peel(privKeys.head, associatedData, onion)
     assert(payload == variableSizeOneHopPaymentPayload.head)
-    assert(
-      nextPacket.hmac == hex"0000000000000000000000000000000000000000000000000000000000000000")
+    assert(nextPacket.hmac == Sha256Digest.empty)
   }
 
   test("create packet with invalid payload") {
@@ -225,9 +223,9 @@ class SphinxSpec extends AnyFunSuite {
     assert(
       Sphinx.computeSharedSecret(blindingKey, nodePrivateKey) == sharedSecret)
     assert(
-      Sphinx.mac(
-        ByteVector("blinded_node_id".getBytes),
-        sharedSecret) == hex"7d846b3445621d49a665e5698c52141e9dda8fa2fe0c3da7e0f9008ccc588a38")
+      Sphinx.mac(ByteVector("blinded_node_id".getBytes),
+                 sharedSecret) == Sha256Digest(
+        hex"7d846b3445621d49a665e5698c52141e9dda8fa2fe0c3da7e0f9008ccc588a38"))
   }
 
   test("computeSharedSecret test 2") {
@@ -247,9 +245,9 @@ class SphinxSpec extends AnyFunSuite {
     assert(
       Sphinx.computeSharedSecret(blindingKey, nodePrivateKey) == sharedSecret)
     assert(
-      Sphinx.mac(
-        ByteVector("blinded_node_id".getBytes),
-        sharedSecret) == hex"8074773a3745818b0d97dd875023486cc35e7afd95f5e9ec1363f517979e8373")
+      Sphinx.mac(ByteVector("blinded_node_id".getBytes),
+                 sharedSecret) == Sha256Digest(
+        hex"8074773a3745818b0d97dd875023486cc35e7afd95f5e9ec1363f517979e8373"))
   }
 
   test("computeSharedSecret test 3") {
@@ -269,9 +267,9 @@ class SphinxSpec extends AnyFunSuite {
     assert(
       Sphinx.computeSharedSecret(blindingKey, nodePrivateKey) == sharedSecret)
     assert(
-      Sphinx.mac(
-        ByteVector("blinded_node_id".getBytes),
-        sharedSecret) == hex"02afb2187075c8af51488242194b44c02624785ccd6fd43b5796c68f3025bf88")
+      Sphinx.mac(ByteVector("blinded_node_id".getBytes),
+                 sharedSecret) == Sha256Digest(
+        hex"02afb2187075c8af51488242194b44c02624785ccd6fd43b5796c68f3025bf88"))
   }
 }
 
