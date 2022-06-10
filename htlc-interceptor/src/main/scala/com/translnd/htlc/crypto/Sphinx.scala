@@ -195,7 +195,7 @@ object Sphinx extends Logging {
 
   /** Decrypt the incoming packet, extract the per-hop payload and build the packet for the next node.
     *
-    * @param ECPrivateKey     this node's private key.
+    * @param privateKey     this node's private key.
     * @param packet         packet received by this node.
     * @return a DecryptedPacket(payload, packet, shared secret) object where:
     *         - payload is the per-hop payload for this node.
