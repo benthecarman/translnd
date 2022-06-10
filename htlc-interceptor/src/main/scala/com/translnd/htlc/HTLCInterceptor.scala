@@ -4,9 +4,9 @@ import akka.Done
 import akka.stream._
 import akka.stream.scaladsl._
 import com.translnd.htlc.config._
+import com.translnd.htlc.crypto.Sphinx
 import com.translnd.htlc.db._
 import grizzled.slf4j.Logging
-import lnrpc._
 import org.bitcoins.core.config._
 import org.bitcoins.core.currency._
 import org.bitcoins.core.number._
@@ -17,7 +17,6 @@ import org.bitcoins.core.protocol.ln.currency._
 import org.bitcoins.core.protocol.ln.fee._
 import org.bitcoins.core.protocol.ln.node._
 import org.bitcoins.core.protocol.ln.routing._
-import org.bitcoins.core.util.TimeUtil
 import org.bitcoins.crypto._
 import org.bitcoins.lnd.rpc._
 import routerrpc.ResolveHoldForwardAction._
@@ -25,7 +24,7 @@ import routerrpc._
 import scodec.bits._
 
 import scala.concurrent._
-import scala.util.Random
+import scala.util._
 
 class HTLCInterceptor(val lnd: LndRpcClient)(implicit conf: TransLndAppConfig)
     extends LndUtils
@@ -34,9 +33,7 @@ class HTLCInterceptor(val lnd: LndRpcClient)(implicit conf: TransLndAppConfig)
 
   private[htlc] val invoiceDAO = InvoiceDAO()
 
-  private val random = new Random(TimeUtil.currentEpochMs)
-
-  def genKeys: (ECPrivateKey, ECPublicKey) = {
+  private lazy val (priv, pub): (ECPrivateKey, ECPublicKey) = {
     val privateKey = ECPrivateKey.freshPrivateKey
 
     (privateKey, privateKey.publicKey)
@@ -56,32 +53,6 @@ class HTLCInterceptor(val lnd: LndRpcClient)(implicit conf: TransLndAppConfig)
 
   private lazy val nodeIdF: Future[NodeId] = lnd.nodeId
 
-  def channelRoutes(): Future[Vector[LnRoute]] = {
-    lnd.listChannels(ListChannelsRequest()).flatMap { channels =>
-      val fs = channels.map { chan =>
-        lnd.lnd.getChanInfo(ChanInfoRequest(chan.chanId)).map { chanInfo =>
-          val policy =
-            if (chanInfo.node1Pub == chan.remotePubkey) chanInfo.node2Policy.get
-            else chanInfo.node1Policy.get
-
-          val scid = ShortChannelId(chan.chanId)
-          val base = FeeBaseMSat(MilliSatoshis(policy.feeBaseMsat))
-          val feePropMilli =
-            FeeProportionalMillionths(UInt32(policy.feeRateMilliMsat))
-          val delta = policy.timeLockDelta.toInt.toShort
-
-          LnRoute(ECPublicKey(chan.remotePubkey),
-                  scid,
-                  base,
-                  feePropMilli,
-                  delta)
-        }
-      }
-
-      Future.sequence(fs)
-    }
-  }
-
   def createInvoice(
       memo: String,
       amount: CurrencyUnit,
@@ -99,11 +70,9 @@ class HTLCInterceptor(val lnd: LndRpcClient)(implicit conf: TransLndAppConfig)
     val dataF = for {
       network <- networkF
       nodeId <- nodeIdF
-      routeHints <- channelRoutes()
-    } yield (network, nodeId, routeHints)
+    } yield (network, nodeId)
 
-    dataF.flatMap { case (network, nodeId, _) =>
-      val (priv, pub) = genKeys
+    dataF.flatMap { case (network, nodeId) =>
       val hrp = LnHumanReadablePart(network, amount)
       val preImage = ECPrivateKey.freshPrivateKey.bytes
       val hash = CryptoUtil.sha256(preImage)
@@ -134,7 +103,7 @@ class HTLCInterceptor(val lnd: LndRpcClient)(implicit conf: TransLndAppConfig)
       )
 
       val routes = Vector(route, route2)
-      val routingInfo = RoutingInfo(random.shuffle(routes))
+      val routingInfo = RoutingInfo(routes)
 
       val tags = LnTaggedFields(
         Vector(hashTag,
@@ -170,30 +139,57 @@ class HTLCInterceptor(val lnd: LndRpcClient)(implicit conf: TransLndAppConfig)
 
             queue.offer(resp)
           case Some(db) =>
-            val action = db.getAction(request)
+            val onion = SphinxOnionDecoder.decode(request.onionBlob)
+            val (resp, updatedDb) =
+              Sphinx.peel(priv, Some(hash), onion) match {
+                case Failure(err) =>
+                  err.printStackTrace()
+                  val resp = ForwardHtlcInterceptResponse(
+                    incomingCircuitKey = request.incomingCircuitKey,
+                    action = FAIL)
+                  (resp, db)
+                case Success(decrypted) =>
+                  if (!decrypted.isLastPacket) {
+                    println("DID NOT GET LAST PACKET")
+                  }
+                  val t = Try(decrypted.tlvStream)
+                  println("=======")
+                  t match {
+                    case Failure(exception) =>
+                      println(decrypted.payload)
+                      exception.printStackTrace()
+                    case Success(value) =>
+                      println(value)
+                  }
+                  println("=======")
 
-            val resp = action match {
-              case SETTLE =>
-                ForwardHtlcInterceptResponse(incomingCircuitKey =
-                                               request.incomingCircuitKey,
-                                             action = SETTLE,
-                                             preimage = db.preimage)
-              case action @ (FAIL | RESUME) =>
-                ForwardHtlcInterceptResponse(incomingCircuitKey =
-                                               request.incomingCircuitKey,
-                                             action = action)
-              case action: Unrecognized =>
-                ForwardHtlcInterceptResponse(incomingCircuitKey =
-                                               request.incomingCircuitKey,
-                                             action = action,
-                                             preimage = db.preimage)
-            }
+                  val action = db.getAction(request)
 
-            val updatedDb = action match {
-              case SETTLE          => db.copy(settled = true)
-              case FAIL | RESUME   => db
-              case _: Unrecognized => db
-            }
+                  val resp = action match {
+                    case SETTLE =>
+                      ForwardHtlcInterceptResponse(incomingCircuitKey =
+                                                     request.incomingCircuitKey,
+                                                   action = SETTLE,
+                                                   preimage = db.preimage)
+                    case action @ (FAIL | RESUME) =>
+                      ForwardHtlcInterceptResponse(incomingCircuitKey =
+                                                     request.incomingCircuitKey,
+                                                   action = action)
+                    case action: Unrecognized =>
+                      ForwardHtlcInterceptResponse(incomingCircuitKey =
+                                                     request.incomingCircuitKey,
+                                                   action = action,
+                                                   preimage = db.preimage)
+                  }
+
+                  val updatedDb = action match {
+                    case SETTLE          => db.copy(settled = true)
+                    case FAIL | RESUME   => db
+                    case _: Unrecognized => db
+                  }
+
+                  (resp, updatedDb)
+              }
 
             queue
               .offer(resp)
