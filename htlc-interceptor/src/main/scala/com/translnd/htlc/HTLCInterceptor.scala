@@ -1,6 +1,6 @@
 package com.translnd.htlc
 
-import akka.Done
+import akka.actor.ActorSystem
 import akka.stream._
 import akka.stream.scaladsl._
 import com.translnd.htlc.config._
@@ -25,14 +25,17 @@ import scodec.bits._
 import scala.concurrent._
 import scala.util._
 
-class HTLCInterceptor(val lnd: LndRpcClient)(implicit conf: TransLndAppConfig)
+class HTLCInterceptor(val lnds: Vector[LndRpcClient])(implicit
+    conf: TransLndAppConfig,
+    system: ActorSystem)
     extends LndUtils
     with Logging {
-  import lnd.{executionContext, system}
+  import system.dispatcher
 
   private[this] val keyManager = new TransKeyManager()
 
   private[htlc] val invoiceDAO = InvoiceDAO()
+  private[htlc] val channelIdDAO = ChannelIdDAO()
 
   private lazy val (queue, source) =
     Source
@@ -40,13 +43,14 @@ class HTLCInterceptor(val lnd: LndRpcClient)(implicit conf: TransLndAppConfig)
       .toMat(BroadcastHub.sink)(Keep.both)
       .run()
 
-  private lazy val networkF: Future[BitcoinNetwork] = lnd.getInfo
+  private lazy val networkF: Future[BitcoinNetwork] = lnds.head.getInfo
     .map(
       _.chains.headOption
         .flatMap(c => BitcoinNetworks.fromStringOpt(c.network))
         .getOrElse(throw new IllegalArgumentException("Unknown LND network")))
 
-  private lazy val nodeIdF: Future[NodeId] = lnd.nodeId
+  private lazy val nodeIdsF: Future[Vector[NodeId]] =
+    Future.sequence(lnds.map(_.nodeId))
 
   def createInvoice(
       memo: String,
@@ -64,10 +68,10 @@ class HTLCInterceptor(val lnd: LndRpcClient)(implicit conf: TransLndAppConfig)
       expiry: Long): Future[LnInvoice] = {
     val dataF = for {
       network <- networkF
-      nodeId <- nodeIdF
-    } yield (network, nodeId)
+      nodeIds <- nodeIdsF
+    } yield (network, nodeIds)
 
-    dataF.flatMap { case (network, nodeId) =>
+    dataF.flatMap { case (network, nodeIds) =>
       val (priv, idx) = keyManager.nextKey()
       val hrp = LnHumanReadablePart(network, amount)
       val preImage = ECPrivateKey.freshPrivateKey.bytes
@@ -80,16 +84,16 @@ class HTLCInterceptor(val lnd: LndRpcClient)(implicit conf: TransLndAppConfig)
       val paymentSecretTag = SecretTag(PaymentSecret(paymentSecret))
       val featuresTag = FeaturesTag(hex"2420") // copied from a LND invoice
 
-      val chanId = ExistingChannelIds.getChannelId(amount.toSatoshis)
-      val route = LnRoute(
-        pubkey = nodeId.pubKey,
-        shortChannelID = chanId,
-        feeBaseMsat = FeeBaseMSat(MilliSatoshis.zero),
-        feePropMilli = FeeProportionalMillionths(UInt32.zero),
-        cltvExpiryDelta = 40
-      )
-
-      val routes = Vector(route)
+      val routes = nodeIds.map { nodeId =>
+        val chanId = ExistingChannelIds.getChannelId(amount.toSatoshis)
+        LnRoute(
+          pubkey = nodeId.pubKey,
+          shortChannelID = chanId,
+          feeBaseMsat = FeeBaseMSat(MilliSatoshis.zero),
+          feePropMilli = FeeProportionalMillionths(UInt32.zero),
+          cltvExpiryDelta = 40
+        )
+      }
       val routingInfo = RoutingInfo(routes)
 
       val tags = LnTaggedFields(
@@ -102,9 +106,13 @@ class HTLCInterceptor(val lnd: LndRpcClient)(implicit conf: TransLndAppConfig)
 
       val invoice: LnInvoice = LnInvoice.build(hrp, tags, priv)
 
-      val invoiceDb = InvoiceDbs.fromLnInvoice(preImage, idx, chanId, invoice)
+      val invoiceDb = InvoiceDbs.fromLnInvoice(preImage, idx, invoice)
+      val channelIdDbs = ChannelIdDbs(hash, routes.map(_.shortChannelID))
 
-      invoiceDAO.create(invoiceDb).map(_.invoice)
+      for {
+        invoiceDb <- invoiceDAO.create(invoiceDb)
+        _ <- channelIdDAO.createAll(channelIdDbs)
+      } yield invoiceDb.invoice
     }
   }
 
@@ -112,12 +120,23 @@ class HTLCInterceptor(val lnd: LndRpcClient)(implicit conf: TransLndAppConfig)
     invoiceDAO.read(hash)
   }
 
-  def startHTLCInterceptor(): Future[Done] = {
-    lnd.router
+  def readHTLC(
+      hash: Sha256Digest): Future[Option[(InvoiceDb, Vector[ChannelIdDb])]] = {
+    invoiceDAO.read(hash).flatMap {
+      case None => Future.successful(None)
+      case Some(invoiceDb) =>
+        channelIdDAO.findByHash(hash).map { ids =>
+          Some((invoiceDb, ids))
+        }
+    }
+  }
+
+  def startHTLCInterceptors(): Unit = {
+    val _ = lnds.map(_.router
       .htlcInterceptor(source)
       .mapAsync(1) { request =>
         val hash = Sha256Digest(request.paymentHash)
-        invoiceDAO.read(hash).flatMap {
+        readHTLC(hash).flatMap {
           case None =>
             // Not our invoice, pass it along
             val resp =
@@ -125,7 +144,7 @@ class HTLCInterceptor(val lnd: LndRpcClient)(implicit conf: TransLndAppConfig)
                                            ResolveHoldForwardAction.RESUME)
 
             queue.offer(resp)
-          case Some(db) =>
+          case Some((db, scids)) =>
             val priv = keyManager.getKey(db.index)
             val onionT = SphinxOnionDecoder.decodeT(request.onionBlob)
 
@@ -134,9 +153,10 @@ class HTLCInterceptor(val lnd: LndRpcClient)(implicit conf: TransLndAppConfig)
             val (resp, updatedDb) = decryptedT match {
               case Failure(err) =>
                 err.printStackTrace()
-                val resp = ForwardHtlcInterceptResponse(
-                  incomingCircuitKey = request.incomingCircuitKey,
-                  action = FAIL)
+                val resp =
+                  ForwardHtlcInterceptResponse(incomingCircuitKey =
+                                                 request.incomingCircuitKey,
+                                               action = FAIL)
                 (resp, db)
               case Success(decrypted) =>
                 if (!decrypted.isLastPacket) {
@@ -144,7 +164,9 @@ class HTLCInterceptor(val lnd: LndRpcClient)(implicit conf: TransLndAppConfig)
                 }
 
                 val action =
-                  db.getAction(request, decrypted.finalHopTLVStream)
+                  db.getAction(request,
+                               decrypted.finalHopTLVStream,
+                               scids.map(_.scid))
 
                 val resp = action match {
                   case SETTLE =>
@@ -189,6 +211,6 @@ class HTLCInterceptor(val lnd: LndRpcClient)(implicit conf: TransLndAppConfig)
               }
         }
       }
-      .runWith(Sink.ignore)
+      .runWith(Sink.ignore))
   }
 }

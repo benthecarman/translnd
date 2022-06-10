@@ -11,7 +11,7 @@ class HTLCInterceptorTest extends TripleLndFixture with LndUtils {
 
   it must "get info from all lnds" in { param =>
     val (_, lndA, htlc, lndC) = param
-    val lndB = htlc.lnd
+    val lndB = htlc.lnds.head
 
     for {
       infoA <- lndA.getInfo
@@ -42,7 +42,7 @@ class HTLCInterceptorTest extends TripleLndFixture with LndUtils {
   it must "make an uninterrupted routed payment" in { param =>
     val (_, lndA, htlc, lndC) = param
 
-    val _ = htlc.startHTLCInterceptor()
+    val _ = htlc.startHTLCInterceptors()
 
     for {
       inv <- lndC.addInvoice("hello world", Satoshis(100), 3600)
@@ -63,17 +63,18 @@ class HTLCInterceptorTest extends TripleLndFixture with LndUtils {
 
     val amount = Satoshis(100)
 
-    val _ = htlc.startHTLCInterceptor()
+    val _ = htlc.startHTLCInterceptors()
+    val lnd = htlc.lnds.head
 
     for {
-      preBal <- htlc.lnd.channelBalance()
+      preBal <- lnd.channelBalance()
       inv <- htlc.createInvoice("hello world", amount, 3600)
 
       pay <- lndA.lnd.sendPaymentSync(
         SendRequest(paymentRequest = inv.toString))
 
       invOpt <- htlc.lookupInvoice(inv.lnTags.paymentHash.hash)
-      postBal <- htlc.lnd.channelBalance()
+      postBal <- lnd.channelBalance()
     } yield {
       assert(pay.paymentError.isEmpty)
       assert(preBal.localBalance + amount == postBal.localBalance)

@@ -5,7 +5,13 @@ CREATE TABLE invoices
     payment_secret TEXT UNIQUE      NOT NULL,
     amount         INTEGER,
     invoice        TEXT UNIQUE      NOT NULL,
-    chan_id        BIGINT           NOT NULL,
     idx            INTEGER UNIQUE   NOT NULL,
     settled        INTEGER          NOT NULL
+);
+
+CREATE TABLE channel_ids
+(
+    id   SERIAL PRIMARY KEY NOT NULL,
+    hash TEXT               NOT NULL,
+    scid BIGINT             NOT NULL
 );

@@ -16,14 +16,14 @@ case class InvoiceDb(
     paymentSecret: PaymentSecret,
     amountOpt: Option[MilliSatoshis],
     invoice: LnInvoice,
-    chanId: ShortChannelId,
     index: Int,
     settled: Boolean) {
   lazy val msats: MilliSatoshis = amountOpt.getOrElse(MilliSatoshis.zero)
 
   def getAction(
       req: ForwardHtlcInterceptRequest,
-      finalHop: FinalHopTLVStream): ResolveHoldForwardAction = {
+      finalHop: FinalHopTLVStream,
+      scids: Vector[ShortChannelId]): ResolveHoldForwardAction = {
     if (Sha256Digest(req.paymentHash) != hash)
       throw new IllegalArgumentException("Payment Hash does not match")
 
@@ -35,7 +35,7 @@ case class InvoiceDb(
           finalHop.paymentDataOpt.exists(_.msats >= msats) &&
           finalHop.amtToForward.amt >= msats
 
-      val correctChanId = req.outgoingRequestedChanId == chanId.u64
+      val correctChanId = scids.map(_.u64).contains(req.outgoingRequestedChanId)
 
       val correctSecret =
         finalHop.paymentDataOpt.exists(_.paymentSecret == paymentSecret)
@@ -52,7 +52,6 @@ object InvoiceDbs {
   def fromLnInvoice(
       preimage: ByteVector,
       idx: Int,
-      chanId: ShortChannelId,
       invoice: LnInvoice): InvoiceDb = {
     val amountOpt = invoice.amount.map(_.toMSat)
     val secret = invoice.lnTags.secret
@@ -66,7 +65,6 @@ object InvoiceDbs {
               paymentSecret = secret,
               amountOpt = amountOpt,
               invoice = invoice,
-              chanId = chanId,
               settled = false)
   }
 }

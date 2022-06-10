@@ -11,6 +11,8 @@ import org.bitcoins.testkit.fixtures.BitcoinSFixture
 import org.bitcoins.testkit.rpc.CachedBitcoindV21
 import org.scalatest.FutureOutcome
 
+import scala.concurrent.Future
+
 trait TripleLndFixture
     extends BitcoinSFixture
     with CachedBitcoindV21
@@ -31,9 +33,11 @@ trait TripleLndFixture
               lnds._2.instance.asInstanceOf[LndInstanceLocal].datadir.getParent
 
             val pg = configWithEmbeddedDb(None, () => pgUrl())
-            val conf = TransLndAppConfig.fromDatadir(parent, Vector(pg))
+            implicit val conf: TransLndAppConfig =
+              TransLndAppConfig.fromDatadir(parent, Vector(pg))
+
             conf.start().map { _ =>
-              new HTLCInterceptor(lnds._2)(conf)
+              new HTLCInterceptor(Vector(lnds._2))
             }
           }
         } yield (bitcoind, lnds._1, htlc, lnds._3)
@@ -42,7 +46,7 @@ trait TripleLndFixture
         val (_, lndA, htlc, lndC) = param
         for {
           _ <- lndA.stop()
-          _ <- htlc.lnd.stop()
+          _ <- Future.sequence(htlc.lnds.map(_.stop()))
           _ <- lndC.stop()
         } yield ()
       }

@@ -2,7 +2,6 @@ package com.translnd.htlc.db
 
 import com.translnd.htlc.config.TransLndAppConfig
 import org.bitcoins.core.protocol.ln._
-import org.bitcoins.core.protocol.ln.channel.ShortChannelId
 import org.bitcoins.core.protocol.ln.currency.MilliSatoshis
 import org.bitcoins.crypto._
 import org.bitcoins.db._
@@ -58,12 +57,10 @@ case class InvoiceDAO()(implicit
 
     def idx: Rep[Int] = column("idx", O.Unique)
 
-    def chanId: Rep[ShortChannelId] = column("chan_id")
-
     def settled: Rep[Boolean] = column("settled")
 
     def * : ProvenShape[InvoiceDb] =
-      (hash, preimage, paymentSecret, amount, invoice, chanId, idx, settled).<>(
+      (hash, preimage, paymentSecret, amount, invoice, idx, settled).<>(
         InvoiceDb.tupled,
         InvoiceDb.unapply)
   }
