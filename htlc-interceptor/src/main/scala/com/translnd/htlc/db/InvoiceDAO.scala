@@ -36,10 +36,18 @@ case class InvoiceDAO()(implicit
       ts: Vector[InvoiceDb]): Query[InvoiceTable, InvoiceDb, Seq] =
     findByPrimaryKeys(ts.map(_.hash))
 
+  def maxIndex(): Future[Option[Int]] = {
+    val query = table.map(_.idx).max
+
+    safeDatabase.run(query.result)
+  }
+
   class InvoiceTable(tag: Tag)
       extends Table[InvoiceDb](tag, schemaName, "invoices") {
 
     def hash: Rep[Sha256Digest] = column("hash", O.PrimaryKey)
+
+    def idx: Rep[Int] = column("idx", O.Unique)
 
     def preimage: Rep[ByteVector] = column("preimage", O.Unique)
 
@@ -52,7 +60,7 @@ case class InvoiceDAO()(implicit
     def settled: Rep[Boolean] = column("settled")
 
     def * : ProvenShape[InvoiceDb] =
-      (hash, preimage, paymentSecret, amount, invoice, settled).<>(
+      (hash, idx, preimage, paymentSecret, amount, invoice, settled).<>(
         InvoiceDb.tupled,
         InvoiceDb.unapply)
   }

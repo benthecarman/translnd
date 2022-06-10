@@ -31,13 +31,9 @@ class HTLCInterceptor(val lnd: LndRpcClient)(implicit conf: TransLndAppConfig)
     with Logging {
   import lnd.{executionContext, system}
 
+  private[this] val keyManager = new TransKeyManager()
+
   private[htlc] val invoiceDAO = InvoiceDAO()
-
-  private lazy val (priv, pub): (ECPrivateKey, ECPublicKey) = {
-    val privateKey = ECPrivateKey.freshPrivateKey
-
-    (privateKey, privateKey.publicKey)
-  }
 
   private lazy val (queue, source) =
     Source
@@ -73,6 +69,8 @@ class HTLCInterceptor(val lnd: LndRpcClient)(implicit conf: TransLndAppConfig)
     } yield (network, nodeId)
 
     dataF.flatMap { case (network, nodeId) =>
+      val (priv, idx) = keyManager.nextKey()
+      val pub = priv.publicKey
       val hrp = LnHumanReadablePart(network, amount)
       val preImage = ECPrivateKey.freshPrivateKey.bytes
       val hash = CryptoUtil.sha256(preImage)
@@ -115,7 +113,7 @@ class HTLCInterceptor(val lnd: LndRpcClient)(implicit conf: TransLndAppConfig)
 
       val invoice: LnInvoice = LnInvoice.build(hrp, tags, priv)
 
-      val invoiceDb = InvoiceDbs.fromLnInvoice(preImage, invoice)
+      val invoiceDb = InvoiceDbs.fromLnInvoice(preImage, idx, invoice)
 
       invoiceDAO.create(invoiceDb).map(_.invoice)
     }
@@ -139,6 +137,7 @@ class HTLCInterceptor(val lnd: LndRpcClient)(implicit conf: TransLndAppConfig)
 
             queue.offer(resp)
           case Some(db) =>
+            val priv = keyManager.getKey(db.index)
             val onion = SphinxOnionDecoder.decode(request.onionBlob)
             val (resp, updatedDb) =
               Sphinx.peel(priv, Some(hash), onion) match {
@@ -153,7 +152,6 @@ class HTLCInterceptor(val lnd: LndRpcClient)(implicit conf: TransLndAppConfig)
                     println("DID NOT GET LAST PACKET")
                   }
 
-                  println(decrypted.finalHopTLVStream.outgoingCLTVValue.cltv)
                   val action =
                     db.getAction(request, decrypted.finalHopTLVStream)
 

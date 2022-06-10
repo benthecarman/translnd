@@ -5,10 +5,11 @@ import com.translnd.htlc.db._
 import com.typesafe.config.Config
 import grizzled.slf4j.Logging
 import org.bitcoins.commons.config._
-import org.bitcoins.core.hd.HDPurpose
+import org.bitcoins.core.hd.HDPurposes
 import org.bitcoins.core.wallet.keymanagement._
 import org.bitcoins.crypto._
 import org.bitcoins.db._
+import org.bitcoins.keymanager.bip39.BIP39KeyManager
 import org.bitcoins.keymanager.config.KeyManagerAppConfig
 import org.bitcoins.lnd.rpc.LndRpcClient
 import org.bitcoins.lnd.rpc.config._
@@ -57,6 +58,12 @@ case class TransLndAppConfig(
       Files.createDirectories(baseDatadir)
     }
 
+    if (!kmConf.seedExists()) {
+      BIP39KeyManager.initialize(aesPasswordOpt = aesPasswordOpt,
+                                 kmParams = kmParams,
+                                 bip39PasswordOpt = bip39PasswordOpt)
+    }
+
     val numMigrations = migrate()
     logger.info(s"Applied $numMigrations")
 
@@ -66,7 +73,7 @@ case class TransLndAppConfig(
   override def stop(): Future[Unit] = Future.unit
 
   lazy val kmParams: KeyManagerParams =
-    KeyManagerParams(kmConf.seedPath, HDPurpose(69), network)
+    KeyManagerParams(kmConf.seedPath, HDPurposes.SegWit, network)
 
   lazy val aesPasswordOpt: Option[AesPassword] = kmConf.aesPasswordOpt
   lazy val bip39PasswordOpt: Option[String] = kmConf.bip39PasswordOpt

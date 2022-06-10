@@ -11,6 +11,7 @@ import scodec.bits.ByteVector
 
 case class InvoiceDb(
     hash: Sha256Digest,
+    index: Int,
     preimage: ByteVector,
     paymentSecret: PaymentSecret,
     amountOpt: Option[MilliSatoshis],
@@ -44,7 +45,10 @@ case class InvoiceDb(
 
 object InvoiceDbs {
 
-  def fromLnInvoice(preimage: ByteVector, invoice: LnInvoice): InvoiceDb = {
+  def fromLnInvoice(
+      preimage: ByteVector,
+      idx: Int,
+      invoice: LnInvoice): InvoiceDb = {
     val amountOpt = invoice.amount.map(_.toMSat)
     val secret = invoice.lnTags.secret
       .map(_.secret)
@@ -53,6 +57,7 @@ object InvoiceDbs {
 
     InvoiceDb(invoice.lnTags.paymentHash.hash,
               preimage = preimage,
+              index = idx,
               paymentSecret = secret,
               amountOpt = amountOpt,
               invoice = invoice,

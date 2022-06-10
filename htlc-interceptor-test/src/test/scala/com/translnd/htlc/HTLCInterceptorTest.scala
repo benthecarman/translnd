@@ -28,6 +28,17 @@ class HTLCInterceptorTest extends TripleLndFixture with LndUtils {
     }
   }
 
+  it must "rotate keys" in { param =>
+    val (_, _, htlc, _) = param
+
+    val amount = Satoshis(1000)
+
+    for {
+      inv <- htlc.createInvoice("hello world", amount, 3600)
+      inv2 <- htlc.createInvoice("hello world", amount, 3600)
+    } yield assert(inv.nodeId != inv2.nodeId)
+  }
+
   it must "make an uninterrupted routed payment" in { param =>
     val (_, lndA, htlc, lndC) = param
 
