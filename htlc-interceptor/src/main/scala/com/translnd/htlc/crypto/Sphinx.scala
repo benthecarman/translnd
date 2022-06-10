@@ -29,7 +29,7 @@ object Sphinx extends Logging {
   def generateKey(keyType: String, secret: ByteVector): ByteVector =
     generateKey(ByteVector.view(keyType.getBytes("UTF-8")), secret)
 
-  def zeroes(length: Int): ByteVector = ByteVector.fill(length)(0)
+  def zeroes(length: Int): ByteVector = ByteVector.low(length)
 
   def generateStream(key: ByteVector, length: Int): ByteVector =
     ChaCha20.encrypt(zeroes(length), key, zeroes(12))
@@ -185,7 +185,7 @@ object Sphinx extends Logging {
           s"invalid payload: length isn't correctly encoded: $perHopPayloadLength != ${perHopPayload.length} + $MacLength"
         )
         val key = generateKey(keyType, secret)
-        val padding1 = padding ++ ByteVector.fill(perHopPayloadLength)(0)
+        val padding1 = padding ++ ByteVector.low(perHopPayloadLength)
         val stream =
           generateStream(key, packetPayloadLength + perHopPayloadLength)
             .takeRight(padding1.length)
@@ -222,8 +222,8 @@ object Sphinx extends Logging {
               // Since we don't know the length of the per-hop payload (we will learn it once we decode the first bytes),
               // we have to pessimistically generate a long cipher stream.
               val stream = generateStream(rho, 2 * packet.payload.length.toInt)
-              val bin = (packet.payload ++ ByteVector.fill(
-                packet.payload.length)(0)) xor stream
+              val bin = (packet.payload ++ ByteVector.low(
+                packet.payload.length)) xor stream
 
               val perHopPayloadLength = peekPayloadLength(bin)
               val perHopPayload = bin.take(perHopPayloadLength - MacLength)
