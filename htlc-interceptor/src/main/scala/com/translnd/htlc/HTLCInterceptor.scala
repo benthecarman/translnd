@@ -70,7 +70,6 @@ class HTLCInterceptor(val lnd: LndRpcClient)(implicit conf: TransLndAppConfig)
 
     dataF.flatMap { case (network, nodeId) =>
       val (priv, idx) = keyManager.nextKey()
-      val pub = priv.publicKey
       val hrp = LnHumanReadablePart(network, amount)
       val preImage = ECPrivateKey.freshPrivateKey.bytes
       val hash = CryptoUtil.sha256(preImage)
@@ -83,24 +82,16 @@ class HTLCInterceptor(val lnd: LndRpcClient)(implicit conf: TransLndAppConfig)
       val featuresTag = FeaturesTag(hex"2420") // copied from a LND invoice
 
       // todo get scid from assumption set
-      val scid = ShortChannelId(UInt64(1234567))
+      val chanId = ShortChannelId(UInt64(12345))
       val route = LnRoute(
         pubkey = nodeId.pubKey,
-        shortChannelID = scid,
+        shortChannelID = chanId,
         feeBaseMsat = FeeBaseMSat(MilliSatoshis.zero),
         feePropMilli = FeeProportionalMillionths(UInt32.zero),
         cltvExpiryDelta = 40
       )
 
-      val route2 = LnRoute(
-        pubkey = pub,
-        shortChannelID = scid,
-        feeBaseMsat = FeeBaseMSat(MilliSatoshis.zero),
-        feePropMilli = FeeProportionalMillionths(UInt32.zero),
-        cltvExpiryDelta = 40
-      )
-
-      val routes = Vector(route, route2)
+      val routes = Vector(route)
       val routingInfo = RoutingInfo(routes)
 
       val tags = LnTaggedFields(
@@ -113,7 +104,7 @@ class HTLCInterceptor(val lnd: LndRpcClient)(implicit conf: TransLndAppConfig)
 
       val invoice: LnInvoice = LnInvoice.build(hrp, tags, priv)
 
-      val invoiceDb = InvoiceDbs.fromLnInvoice(preImage, idx, invoice)
+      val invoiceDb = InvoiceDbs.fromLnInvoice(preImage, idx, chanId, invoice)
 
       invoiceDAO.create(invoiceDb).map(_.invoice)
     }
