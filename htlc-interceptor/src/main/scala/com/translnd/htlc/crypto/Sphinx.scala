@@ -214,10 +214,9 @@ object Sphinx extends Logging {
           case Success(packetEphKey) =>
             val sharedSecret = computeSharedSecret(packetEphKey, privateKey)
             val mu = generateKey("mu", sharedSecret)
-            val check = mac(mu,
-                            paymentHash
-                              .map(packet.payload ++ _.bytes)
-                              .getOrElse(packet.payload))
+            val hashBytes = paymentHash.map(_.bytes).getOrElse(ByteVector.empty)
+            val msg = packet.payload ++ hashBytes
+            val check = mac(mu, msg)
             if (check == packet.hmac) {
               val rho = generateKey("rho", sharedSecret)
               // Since we don't know the length of the per-hop payload (we will learn it once we decode the first bytes),
@@ -245,7 +244,9 @@ object Sphinx extends Logging {
                                                    hmac),
                                 sharedSecret))
             } else {
-              Failure(new RuntimeException("Invalid onion hmac"))
+              Failure(
+                new RuntimeException(
+                  s"Invalid onion hmac: $check != ${packet.hmac}"))
             }
           case Failure(_) => Failure(new RuntimeException("Invalid onion key"))
         }
