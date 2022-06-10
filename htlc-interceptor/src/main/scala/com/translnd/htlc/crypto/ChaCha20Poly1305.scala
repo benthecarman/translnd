@@ -120,8 +120,8 @@ object ChaCha20Poly1305 extends Logging {
       pad16(aad),
       ciphertext,
       pad16(ciphertext),
-      UInt64(aad.length).bytes,
-      UInt64(ciphertext.length).bytes
+      UInt64(aad.length).bytes.reverse,
+      UInt64(ciphertext.length).bytes.reverse
     )
     logger.debug(
       s"encrypt($key, $nonce, $aad, $plaintext) = ($ciphertext, $tag)")
@@ -148,8 +148,8 @@ object ChaCha20Poly1305 extends Logging {
       pad16(aad),
       ciphertext,
       pad16(ciphertext),
-      UInt64(aad.length).bytes,
-      UInt64(ciphertext.length).bytes
+      UInt64(aad.length).bytes.reverse,
+      UInt64(ciphertext.length).bytes.reverse
     )
     if (tag != mac) throw InvalidMac()
     val plaintext = ChaCha20.decrypt(ciphertext, key, nonce, 1)
