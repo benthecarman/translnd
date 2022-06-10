@@ -12,7 +12,6 @@ import org.bitcoins.core.currency._
 import org.bitcoins.core.number._
 import org.bitcoins.core.protocol.ln.LnTag._
 import org.bitcoins.core.protocol.ln._
-import org.bitcoins.core.protocol.ln.channel._
 import org.bitcoins.core.protocol.ln.currency._
 import org.bitcoins.core.protocol.ln.fee._
 import org.bitcoins.core.protocol.ln.node._
@@ -81,8 +80,7 @@ class HTLCInterceptor(val lnd: LndRpcClient)(implicit conf: TransLndAppConfig)
       val paymentSecretTag = SecretTag(PaymentSecret(paymentSecret))
       val featuresTag = FeaturesTag(hex"2420") // copied from a LND invoice
 
-      // todo get scid from assumption set
-      val chanId = ShortChannelId(UInt64(12345))
+      val chanId = ExistingChannelIds.getChannelId(amount.toSatoshis)
       val route = LnRoute(
         pubkey = nodeId.pubKey,
         shortChannelID = chanId,
