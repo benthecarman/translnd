@@ -16,6 +16,7 @@
 
 package com.translnd.htlc.crypto
 
+import com.translnd.htlc.OnionRoutingPacket
 import org.bitcoins.crypto._
 import org.scalatest.funsuite.AnyFunSuite
 import scodec.bits._
@@ -28,6 +29,125 @@ class SphinxSpec extends AnyFunSuite {
 
   import Sphinx._
   import SphinxSpec._
+
+  test("generate ephemeral keys and secrets (reference test vector)") {
+    val (ephkeys, sharedsecrets) =
+      computeEphemeralPublicKeysAndSharedSecrets(sessionKey, publicKeys)
+    assert(ephkeys.head == ECPublicKey(
+      hex"02eec7245d6b7d2ccb30380bfbe2a3648cd7a942653f5aa340edcea1f283686619"))
+    assert(
+      sharedsecrets.head == hex"53eb63ea8a3fec3b3cd433b85cd62a4b145e1dda09391b348c4e1cd36a03ea66")
+    assert(ephkeys(1) == ECPublicKey(
+      hex"028f9438bfbf7feac2e108d677e3a82da596be706cc1cf342b75c7b7e22bf4e6e2"))
+    assert(sharedsecrets(
+      1) == hex"a6519e98832a0b179f62123b3567c106db99ee37bef036e783263602f3488fae")
+    assert(ephkeys(2) == ECPublicKey(
+      hex"03bfd8225241ea71cd0843db7709f4c222f62ff2d4516fd38b39914ab6b83e0da0"))
+    assert(sharedsecrets(
+      2) == hex"3a6b412548762f0dbccce5c7ae7bb8147d1caf9b5471c34120b30bc9c04891cc")
+    assert(ephkeys(3) == ECPublicKey(
+      hex"031dde6926381289671300239ea8e57ffaf9bebd05b9a5b95beaf07af05cd43595"))
+    assert(sharedsecrets(
+      3) == hex"21e13c2d7cfe7e18836df50872466117a295783ab8aab0e7ecc8c725503ad02d")
+    assert(ephkeys(4) == ECPublicKey(
+      hex"03a214ebd875aab6ddfd77f22c5e7311d7f77f17a169e599f157bbcdae8bf071f4"))
+    assert(sharedsecrets(
+      4) == hex"b5756b9b542727dbafc6765a49488b023a725d631af688fc031217e90770c328")
+  }
+
+  test("generate filler with fixed-size payloads (reference test vector)") {
+    val (_, sharedsecrets) =
+      computeEphemeralPublicKeysAndSharedSecrets(sessionKey, publicKeys)
+    val filler = generateFiller("rho",
+                                1300,
+                                sharedsecrets.dropRight(1),
+                                referenceFixedSizePaymentPayloads.dropRight(1))
+    assert(
+      filler == hex"c6b008cf6414ed6e4c42c291eb505e9f22f5fe7d0ecdd15a833f4d016ac974d33adc6ea3293e20859e87ebfb937ba406abd025d14af692b12e9c9c2adbe307a679779259676211c071e614fdb386d1ff02db223a5b2fae03df68d321c7b29f7c7240edd3fa1b7cb6903f89dc01abf41b2eb0b49b6b8d73bb0774b58204c0d0e96d3cce45ad75406be0bc009e327b3e712a4bd178609c00b41da2daf8a4b0e1319f07a492ab4efb056f0f599f75e6dc7e0d10ce1cf59088ab6e873de377343880f7a24f0e36731a0b72092f8d5bc8cd346762e93b2bf203d00264e4bc136fc142de8f7b69154deb05854ea88e2d7506222c95ba1aab065c8a851391377d3406a35a9af3ac")
+  }
+
+  test("generate filler with variable-size payloads") {
+    val (_, sharedsecrets) =
+      computeEphemeralPublicKeysAndSharedSecrets(sessionKey, publicKeys)
+    val filler =
+      generateFiller("rho",
+                     1300,
+                     sharedsecrets.dropRight(1),
+                     referenceVariableSizePaymentPayloads.dropRight(1))
+    assert(
+      filler == hex"b77d99c935d3f32469844f7e09340a91ded147557bdd0456c369f7e449587c0f5666faab58040146db49024db88553729bce12b860391c29c1779f022ae48a9cb314ca35d73fc91addc92632bcf7ba6fd9f38e6fd30fabcedbd5407b6648073c38331ee7ab0332f41f550c180e1601f8c25809ed75b3a1e78635a2ef1b828e92c9658e76e49f995d72cf9781eec0c838901d0bdde3ac21c13b4979ac9e738a1c4d0b9741d58e777ad1aed01263ad1390d36a18a6b92f4f799dcf75edbb43b7515e8d72cb4f827a9af0e7b9338d07b1a24e0305b5535f5b851b1144bad6238b9d9482b5ba6413f1aafac3cdde5067966ed8b78f7c1c5f916a05f874d5f17a2b7d0ae75d66a5f1bb6ff932570dc5a0cf3ce04eb5d26bc55c2057af1f8326e20a7d6f0ae644f09d00fac80de60f20aceee85be41a074d3e1dda017db79d0070b99f54736396f206ee3777abd4c00a4bb95c871750409261e3b01e59a3793a9c20159aae4988c68397a1443be6370fd9614e46108291e615691729faea58537209fa668a172d066d0efff9bc77c2bd34bd77870ad79effd80140990e36731a0b72092f8d5bc8cd346762e93b2bf203d00264e4bc136fc142de8f7b69154deb05854ea88e2d7506222c95ba1aab065c8a")
+  }
+
+  test("peek at per-hop payload length") {
+    val testCases = Map(
+      34 -> hex"01",
+      41 -> hex"08",
+      65 -> hex"00",
+      285 -> hex"fc",
+      288 -> hex"fd00fd",
+      65570 -> hex"fdffff"
+    )
+
+    for ((expected, payload) <- testCases) {
+      assert(peekPayloadLength(payload) === expected)
+    }
+  }
+
+  val one =
+    hex"0100000000000000000000000000000000000000000000000000000000000000"
+
+  test("is last packet") {
+    val testCases = Seq(
+      // Bolt 1.0 payloads use the next packet's hmac to signal termination.
+      (true,
+       DecryptedPacket(hex"00",
+                       OnionRoutingPacket(0,
+                                          publicKeys.head,
+                                          ByteVector.empty,
+                                          Sha256Digest.empty),
+                       one)),
+      (false,
+       DecryptedPacket(hex"00",
+                       OnionRoutingPacket(0,
+                                          publicKeys.head,
+                                          ByteVector.empty,
+                                          Sha256Digest(one)),
+                       one)),
+      // Bolt 1.1 payloads currently also use the next packet's hmac to signal termination.
+      (true,
+       DecryptedPacket(hex"0101",
+                       OnionRoutingPacket(0,
+                                          publicKeys.head,
+                                          ByteVector.empty,
+                                          Sha256Digest.empty),
+                       one)),
+      (false,
+       DecryptedPacket(hex"0101",
+                       OnionRoutingPacket(0,
+                                          publicKeys.head,
+                                          ByteVector.empty,
+                                          Sha256Digest(one)),
+                       one)),
+      (false,
+       DecryptedPacket(hex"0100",
+                       OnionRoutingPacket(0,
+                                          publicKeys.head,
+                                          ByteVector.empty,
+                                          Sha256Digest(one)),
+                       one)),
+      (false,
+       DecryptedPacket(hex"0101",
+                       OnionRoutingPacket(0,
+                                          publicKeys.head,
+                                          ByteVector.empty,
+                                          Sha256Digest(one)),
+                       one))
+    )
+
+    for ((expected, packet) <- testCases) {
+      assert(packet.isLastPacket === expected)
+    }
+  }
 
   test(
     "create payment packet with fixed-size payloads (reference test vector)") {

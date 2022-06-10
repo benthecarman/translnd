@@ -12,6 +12,9 @@ import scala.util._
 
 object Sphinx extends Logging {
 
+  val G = ECPublicKey(
+    "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798")
+
   /** Supported packet version. Note that since this value is outside of the onion encrypted payload, intermediate
     * nodes may or may not use this value when forwarding the packet to the next node.
     */
@@ -60,9 +63,7 @@ object Sphinx extends Logging {
   def computeEphemeralECPublicKeysAndSharedSecrets(
       sessionKey: ECPrivateKey,
       ECPublicKeys: Seq[ECPublicKey]): (Seq[ECPublicKey], Seq[ByteVector]) = {
-    val g = ECPublicKey(
-      "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798")
-    val ephemeralECPublicKey0 = blind(g, sessionKey.bytes)
+    val ephemeralECPublicKey0 = blind(G, sessionKey.bytes)
     val secret0 = computeSharedSecret(ECPublicKeys.head, sessionKey)
     val blindingFactor0 = computeBlindingFactor(ephemeralECPublicKey0, secret0)
     computeEphemeralECPublicKeysAndSharedSecrets(sessionKey,
@@ -310,6 +311,43 @@ object Sphinx extends Logging {
     nextPacket
   }
 
+  def computeEphemeralPublicKeysAndSharedSecrets(
+      sessionKey: ECPrivateKey,
+      publicKeys: Seq[ECPublicKey]): (Seq[ECPublicKey], Seq[ByteVector]) = {
+    val ephemeralPublicKey0 = blind(G, sessionKey.bytes)
+    val secret0 = computeSharedSecret(publicKeys.head, sessionKey)
+    val blindingFactor0 = computeBlindingFactor(ephemeralPublicKey0, secret0)
+    computeEphemeralPublicKeysAndSharedSecrets(sessionKey,
+                                               publicKeys.tail,
+                                               Seq(ephemeralPublicKey0),
+                                               Seq(blindingFactor0),
+                                               Seq(secret0))
+  }
+
+  @tailrec
+  private def computeEphemeralPublicKeysAndSharedSecrets(
+      sessionKey: ECPrivateKey,
+      publicKeys: Seq[ECPublicKey],
+      ephemeralPublicKeys: Seq[ECPublicKey],
+      blindingFactors: Seq[ByteVector],
+      sharedSecrets: Seq[ByteVector]): (Seq[ECPublicKey], Seq[ByteVector]) = {
+    if (publicKeys.isEmpty)
+      (ephemeralPublicKeys, sharedSecrets)
+    else {
+      val ephemeralPublicKey =
+        blind(ephemeralPublicKeys.last, blindingFactors.last)
+      val secret =
+        computeSharedSecret(blind(publicKeys.head, blindingFactors), sessionKey)
+      val blindingFactor = computeBlindingFactor(ephemeralPublicKey, secret)
+      computeEphemeralPublicKeysAndSharedSecrets(
+        sessionKey,
+        publicKeys.tail,
+        ephemeralPublicKeys :+ ephemeralPublicKey,
+        blindingFactors :+ blindingFactor,
+        sharedSecrets :+ secret)
+    }
+  }
+
   /** Create an encrypted onion packet that contains payloads for all nodes in the list.
     *
     * @param sessionKey          session key.
@@ -332,8 +370,8 @@ object Sphinx extends Logging {
       computeEphemeralECPublicKeysAndSharedSecrets(sessionKey, ECPublicKeys)
     val filler = generateFiller("rho",
                                 packetPayloadLength,
-                                sharedsecrets.init,
-                                payloads.init)
+                                sharedsecrets.dropRight(1),
+                                payloads.dropRight(1))
 
     // We deterministically-derive the initial payload bytes: see https://github.com/lightningnetwork/lightning-rfc/pull/697
     val startingBytes =

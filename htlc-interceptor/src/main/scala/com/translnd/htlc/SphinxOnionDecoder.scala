@@ -9,9 +9,7 @@ case class OnionRoutingPacket(
     version: Int,
     pubkey: ECPublicKey,
     payload: ByteVector,
-    hmac: Sha256Digest) {
-  require(payload.size == 1300)
-}
+    hmac: Sha256Digest)
 
 object SphinxOnionDecoder {
 
