@@ -1,6 +1,6 @@
 package com.translnd.htlc.crypto
 
-import com.translnd.htlc.OnionRoutingPacket
+import com.translnd.htlc.{FinalHopTLVStream, OnionRoutingPacket}
 import grizzled.slf4j.Logging
 import org.bitcoins.core.protocol._
 import org.bitcoins.core.protocol.tlv.TLV
@@ -142,6 +142,10 @@ object Sphinx extends Logging {
       }
 
       loop(Vector.empty, remain)
+    }
+
+    lazy val finalHopTLVStream: FinalHopTLVStream = {
+      FinalHopTLVStream.fromTLVs(tlvStream)
     }
   }
 

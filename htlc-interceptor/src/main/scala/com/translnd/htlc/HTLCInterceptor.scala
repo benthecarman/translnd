@@ -152,18 +152,10 @@ class HTLCInterceptor(val lnd: LndRpcClient)(implicit conf: TransLndAppConfig)
                   if (!decrypted.isLastPacket) {
                     println("DID NOT GET LAST PACKET")
                   }
-                  val t = Try(decrypted.tlvStream)
-                  println("=======")
-                  t match {
-                    case Failure(exception) =>
-                      println(decrypted.payload)
-                      exception.printStackTrace()
-                    case Success(value) =>
-                      println(value)
-                  }
-                  println("=======")
 
-                  val action = db.getAction(request)
+                  println(decrypted.finalHopTLVStream.outgoingCLTVValue.cltv)
+                  val action =
+                    db.getAction(request, decrypted.finalHopTLVStream)
 
                   val resp = action match {
                     case SETTLE =>

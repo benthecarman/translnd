@@ -1,5 +1,6 @@
 package com.translnd.htlc.db
 
+import com.translnd.htlc.FinalHopTLVStream
 import org.bitcoins.core.protocol.ln._
 import org.bitcoins.core.protocol.ln.currency._
 import org.bitcoins.crypto._
@@ -17,16 +18,24 @@ case class InvoiceDb(
     settled: Boolean) {
   lazy val msats: MilliSatoshis = amountOpt.getOrElse(MilliSatoshis.zero)
 
-  def getAction(req: ForwardHtlcInterceptRequest): ResolveHoldForwardAction = {
+  def getAction(
+      req: ForwardHtlcInterceptRequest,
+      finalHop: FinalHopTLVStream): ResolveHoldForwardAction = {
     if (Sha256Digest(req.paymentHash) != hash)
       throw new IllegalArgumentException("Payment Hash does not match")
 
     if (settled) {
       SETTLE // skip already settled invoices
     } else {
-      val validAmount = msats.toUInt64 <= req.outgoingAmountMsat
+      val validAmount =
+        msats.toUInt64 <= req.outgoingAmountMsat &&
+          finalHop.paymentDataOpt.exists(_.msats >= msats) &&
+          finalHop.amtToForward.amt >= msats
 
-      if (validAmount) {
+      val correctSecret =
+        finalHop.paymentDataOpt.exists(_.paymentSecret == paymentSecret)
+
+      if (validAmount && correctSecret) {
         SETTLE
       } else FAIL
     }
