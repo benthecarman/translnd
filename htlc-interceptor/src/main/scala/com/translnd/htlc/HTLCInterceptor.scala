@@ -159,10 +159,6 @@ class HTLCInterceptor(val lnds: Vector[LndRpcClient])(implicit
                                                action = FAIL)
                 (resp, db)
               case Success(decrypted) =>
-                if (!decrypted.isLastPacket) {
-                  println("DID NOT GET LAST PACKET")
-                }
-
                 val action =
                   db.getAction(request,
                                decrypted.finalHopTLVStream,
