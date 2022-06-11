@@ -23,26 +23,27 @@ case class InvoiceDb(
   def getAction(
       req: ForwardHtlcInterceptRequest,
       finalHop: FinalHopTLVStream,
-      scids: Vector[ShortChannelId]): ResolveHoldForwardAction = {
+      scids: Vector[ShortChannelId]): Option[ResolveHoldForwardAction] = {
     if (Sha256Digest(req.paymentHash) != hash)
       throw new IllegalArgumentException("Payment Hash does not match")
 
     if (settled) {
-      SETTLE // skip already settled invoices
+      Some(SETTLE) // skip already settled invoices
     } else {
-      val validAmount =
-        msats.toUInt64 <= req.outgoingAmountMsat &&
-          finalHop.paymentDataOpt.exists(_.msats >= msats) &&
-          finalHop.amtToForward.amt >= msats
+      val wholeAmount = msats.toUInt64 <= req.outgoingAmountMsat &&
+        finalHop.amtToForward.amt >= msats
+
+      val correctAmt = finalHop.paymentDataOpt.exists(_.msats >= msats)
 
       val correctChanId = scids.map(_.u64).contains(req.outgoingRequestedChanId)
 
       val correctSecret =
         finalHop.paymentDataOpt.exists(_.paymentSecret == paymentSecret)
 
-      if (validAmount && correctSecret && correctChanId) {
-        SETTLE
-      } else FAIL
+      if (correctAmt && correctSecret && correctChanId) {
+        if (wholeAmount) Some(SETTLE)
+        else None
+      } else Some(FAIL)
     }
   }
 }

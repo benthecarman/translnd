@@ -17,6 +17,62 @@ import scala.concurrent.duration.DurationInt
 
 trait TestUtil extends Logging with LndUtils {
 
+  val CHANNEL_SIZE: Satoshis = Satoshis(50_000)
+
+  def createMPPLnds(bitcoind: BitcoindRpcClient)(implicit
+      system: ActorSystem): Future[(LndRpcClient, LndRpcClient)] = {
+    import system.dispatcher
+
+    val actorSystemA =
+      ActorSystem.create("bitcoin-s-lnd-test-" + FileUtil.randomDirName)
+    val clientA = LndRpcTestClient
+      .fromSbtDownload(Some(bitcoind))(actorSystemA)
+
+    val actorSystemB =
+      ActorSystem.create("bitcoin-s-lnd-test-" + FileUtil.randomDirName)
+    val clientB = LndRpcTestClient
+      .fromSbtDownload(Some(bitcoind))(actorSystemB)
+
+    val clientsF = for {
+      a <- clientA.start()
+      b <- clientB.start()
+    } yield (a, b)
+
+    def isSynced: Future[Boolean] = for {
+      (clientA, clientB) <- clientsF
+
+      infoA <- clientA.getInfo
+      infoB <- clientB.getInfo
+    } yield infoA.syncedToChain && infoB.syncedToChain
+
+    def isFunded: Future[Boolean] = for {
+      (clientA, clientB) <- clientsF
+
+      balA <- clientA.walletBalance()
+      balB <- clientB.walletBalance()
+    } yield {
+      balA.confirmedBalance > Satoshis.zero &&
+      balB.confirmedBalance > Satoshis.zero
+    }
+
+    for {
+      (clientA, clientB) <- clientsF
+
+      _ <- connectLNNodes(clientA, clientB)
+
+      _ <- fundLNNodes(bitcoind, clientA, clientB)
+
+      _ <- TestAsyncUtil.awaitConditionF(() => isSynced)
+      _ <- TestAsyncUtil.awaitConditionF(() => isFunded)
+
+      _ <- openChannel(bitcoind, clientA, clientB)
+      _ <- openChannel(bitcoind, clientA, clientB, CHANNEL_SIZE, Satoshis.zero)
+      _ <- openChannel(bitcoind, clientA, clientB, CHANNEL_SIZE, Satoshis.zero)
+      _ <- TestAsyncUtil.awaitConditionF(() => isSynced)
+      _ <- TestAsyncUtil.nonBlockingSleep(10.seconds)
+    } yield (clientA, clientB)
+  }
+
   def createNodeTriple(bitcoind: BitcoindRpcClient)(implicit
   system: ActorSystem): Future[(LndRpcClient, LndRpcClient, LndRpcClient)] = {
     import system.dispatcher
