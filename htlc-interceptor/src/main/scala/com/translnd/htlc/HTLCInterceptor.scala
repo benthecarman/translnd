@@ -21,6 +21,7 @@ import org.bitcoins.lnd.rpc._
 import routerrpc.ResolveHoldForwardAction._
 import routerrpc._
 import scodec.bits._
+import slick.dbio.DBIO
 
 import scala.concurrent._
 import scala.util._
@@ -109,10 +110,12 @@ class HTLCInterceptor(val lnds: Vector[LndRpcClient])(implicit
       val invoiceDb = InvoiceDbs.fromLnInvoice(preImage, idx, invoice)
       val channelIdDbs = ChannelIdDbs(hash, routes.map(_.shortChannelID))
 
-      for {
-        invoiceDb <- invoiceDAO.create(invoiceDb)
-        _ <- channelIdDAO.createAll(channelIdDbs)
+      val action = for {
+        invoiceDb <- invoiceDAO.createAction(invoiceDb)
+        _ <- channelIdDAO.createAllAction(channelIdDbs)
       } yield invoiceDb.invoice
+
+      invoiceDAO.safeDatabase.run(action)
     }
   }
 
@@ -122,13 +125,15 @@ class HTLCInterceptor(val lnds: Vector[LndRpcClient])(implicit
 
   def readHTLC(
       hash: Sha256Digest): Future[Option[(InvoiceDb, Vector[ChannelIdDb])]] = {
-    invoiceDAO.read(hash).flatMap {
-      case None => Future.successful(None)
+    val action = invoiceDAO.findByPrimaryKeyAction(hash).flatMap {
+      case None => DBIO.successful(None)
       case Some(invoiceDb) =>
-        channelIdDAO.findByHash(hash).map { ids =>
+        channelIdDAO.findByHashAction(hash).map { ids =>
           Some((invoiceDb, ids))
         }
     }
+
+    invoiceDAO.safeDatabase.run(action)
   }
 
   def startHTLCInterceptors(): Unit = {

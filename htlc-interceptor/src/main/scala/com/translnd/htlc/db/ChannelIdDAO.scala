@@ -22,10 +22,11 @@ case class ChannelIdDAO()(implicit
 
   override val table: TableQuery[ChannelIdTable] = TableQuery[ChannelIdTable]
 
-  def findByHash(hash: Sha256Digest): Future[Vector[ChannelIdDb]] = {
-    val query = table.filter(_.hash === hash).result
-
-    safeDatabase.runVec(query)
+  def findByHashAction(hash: Sha256Digest): DBIOAction[
+    Vector[ChannelIdDb],
+    NoStream,
+    Effect.Read] = {
+    table.filter(_.hash === hash).result.map(_.toVector)
   }
 
   class ChannelIdTable(tag: Tag)
