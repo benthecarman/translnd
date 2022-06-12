@@ -42,7 +42,7 @@ class HTLCInterceptorTest extends TripleLndFixture with LndUtils {
   it must "make an uninterrupted routed payment" in { param =>
     val (_, lndA, htlc, lndC) = param
 
-    val _ = htlc.startHTLCInterceptors()
+    htlc.startHTLCInterceptors()
 
     for {
       inv <- lndC.addInvoice("hello world", Satoshis(100), 3600)
@@ -63,7 +63,7 @@ class HTLCInterceptorTest extends TripleLndFixture with LndUtils {
 
     val amount = Satoshis(100)
 
-    val _ = htlc.startHTLCInterceptors()
+    htlc.startHTLCInterceptors()
     val lnd = htlc.lnds.head
 
     for {

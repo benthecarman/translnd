@@ -3,10 +3,12 @@ package com.translnd.htlc
 import akka.actor.ActorSystem
 import akka.stream._
 import akka.stream.scaladsl._
+import com.google.common.util.concurrent.AtomicLongMap
 import com.translnd.htlc.config._
 import com.translnd.htlc.crypto.Sphinx
 import com.translnd.htlc.db._
 import grizzled.slf4j.Logging
+import org.bitcoins.asyncutil.AsyncUtil
 import org.bitcoins.core.config._
 import org.bitcoins.core.currency._
 import org.bitcoins.core.number._
@@ -37,12 +39,6 @@ class HTLCInterceptor(val lnds: Vector[LndRpcClient])(implicit
 
   private[htlc] val invoiceDAO = InvoiceDAO()
   private[htlc] val channelIdDAO = ChannelIdDAO()
-
-  private lazy val (queue, source) =
-    Source
-      .queue[ForwardHtlcInterceptResponse](200, OverflowStrategy.dropHead)
-      .toMat(BroadcastHub.sink)(Keep.both)
-      .run()
 
   private lazy val networkF: Future[BitcoinNetwork] = lnds.head.getInfo
     .map(
@@ -136,82 +132,122 @@ class HTLCInterceptor(val lnds: Vector[LndRpcClient])(implicit
     invoiceDAO.safeDatabase.run(action)
   }
 
-  def startHTLCInterceptors(): Unit = {
-    val _ = lnds.map(_.router
-      .htlcInterceptor(source)
-      .mapAsync(1) { request =>
-        val hash = Sha256Digest(request.paymentHash)
-        readHTLC(hash).flatMap {
-          case None =>
-            // Not our invoice, pass it along
-            val resp =
-              ForwardHtlcInterceptResponse(request.incomingCircuitKey,
-                                           ResolveHoldForwardAction.RESUME)
+  def startHTLCInterceptors(
+      parallelism: Int = Runtime.getRuntime.availableProcessors()): Unit = {
+    val _ = lnds.map { lnd =>
+      val (queue, source) =
+        Source
+          .queue[ForwardHtlcInterceptResponse](200, OverflowStrategy.dropHead)
+          .toMat(BroadcastHub.sink)(Keep.both)
+          .run()
 
-            queue.offer(resp)
-          case Some((db, scids)) =>
-            val priv = keyManager.getKey(db.index)
-            val onionT = SphinxOnionDecoder.decodeT(request.onionBlob)
+      val paymentMap = AtomicLongMap.create[Sha256Digest]()
 
-            val decryptedT = onionT.flatMap(Sphinx.peel(priv, Some(hash), _))
+      lnd.router
+        .htlcInterceptor(source)
+        .mapAsync(parallelism) { request =>
+          val ck = request.incomingCircuitKey
+          val hash = Sha256Digest(request.paymentHash)
+          readHTLC(hash).flatMap {
+            case None =>
+              // Not our invoice, pass it along
+              val resp =
+                ForwardHtlcInterceptResponse(request.incomingCircuitKey,
+                                             ResolveHoldForwardAction.RESUME)
 
-            val (resp, updatedDb) = decryptedT match {
-              case Failure(err) =>
-                err.printStackTrace()
-                val resp =
-                  ForwardHtlcInterceptResponse(incomingCircuitKey =
-                                                 request.incomingCircuitKey,
-                                               action = FAIL)
-                (resp, db)
-              case Success(decrypted) =>
-                val action =
-                  db.getAction(request,
-                               decrypted.finalHopTLVStream,
-                               scids.map(_.scid))
+              queue.offer(resp).map(_ => ())
+            case Some((db, scids)) =>
+              val priv = keyManager.getKey(db.index)
+              val onionT = SphinxOnionDecoder.decodeT(request.onionBlob)
 
-                val resp = action match {
-                  case SETTLE =>
-                    ForwardHtlcInterceptResponse(incomingCircuitKey =
-                                                   request.incomingCircuitKey,
-                                                 action = SETTLE,
-                                                 preimage = db.preimage)
-                  case action @ (FAIL | RESUME) =>
-                    ForwardHtlcInterceptResponse(incomingCircuitKey =
-                                                   request.incomingCircuitKey,
-                                                 action = action)
-                  case action: Unrecognized =>
-                    ForwardHtlcInterceptResponse(incomingCircuitKey =
-                                                   request.incomingCircuitKey,
-                                                 action = action,
-                                                 preimage = db.preimage)
-                }
+              val decryptedT = onionT.flatMap(Sphinx.peel(priv, Some(hash), _))
 
-                val updatedDb = action match {
-                  case SETTLE          => db.copy(settled = true)
-                  case FAIL | RESUME   => db
-                  case _: Unrecognized => db
-                }
+              val resF = decryptedT match {
+                case Failure(err) =>
+                  err.printStackTrace()
+                  val resp =
+                    ForwardHtlcInterceptResponse(incomingCircuitKey = ck,
+                                                 action = FAIL)
+                  Future.successful((resp, db))
+                case Success(decrypted) =>
+                  val actionOpt = db.getAction(request,
+                                               decrypted.finalHopTLVStream,
+                                               scids.map(_.scid))
 
-                (resp, updatedDb)
-            }
+                  actionOpt match {
+                    case Some(SETTLE) =>
+                      paymentMap.remove(hash)
+                      val resp =
+                        ForwardHtlcInterceptResponse(incomingCircuitKey = ck,
+                                                     action = SETTLE,
+                                                     preimage = db.preimage)
+                      Future.successful((resp, db.copy(settled = true)))
+                    case Some(FAIL) =>
+                      val resp =
+                        ForwardHtlcInterceptResponse(incomingCircuitKey = ck,
+                                                     action = FAIL)
+                      Future.successful((resp, db))
+                    case Some(RESUME) =>
+                      val resp =
+                        ForwardHtlcInterceptResponse(incomingCircuitKey = ck,
+                                                     action = RESUME)
+                      Future.successful((resp, db))
+                    case Some(action: Unrecognized) =>
+                      val resp =
+                        ForwardHtlcInterceptResponse(incomingCircuitKey = ck,
+                                                     action = action,
+                                                     preimage = db.preimage)
+                      Future.successful((resp, db))
+                    case None =>
+                      // Update paymentMap to have new payment
+                      val amt = request.outgoingAmountMsat.toLong
+                      paymentMap.addAndGet(hash, amt)
 
-            queue
-              .offer(resp)
-              .flatMap {
-                case QueueOfferResult.Enqueued =>
-                  invoiceDAO.update(updatedDb)
-                case QueueOfferResult.Dropped =>
-                  Future.failed(new RuntimeException(
-                    s"Dropped response for invoice ${db.hash.hex}"))
-                case QueueOfferResult.Failure(ex) =>
-                  Future.failed(new RuntimeException(
-                    s"Failed to respond for invoice ${db.hash.hex}: ${ex.getMessage}"))
-                case QueueOfferResult.QueueClosed =>
-                  Future.failed(new RuntimeException(
-                    s"Queue closed: failed to respond for invoice ${db.hash.hex}"))
+                      AsyncUtil
+                        .awaitCondition(() => {
+                                          val agg = paymentMap.get(hash)
+                                          agg >= db.amountOpt
+                                            .map(_.toLong)
+                                            .getOrElse(0L)
+                                        },
+                                        maxTries = 1200)
+                        .map { _ =>
+                          paymentMap.remove(hash)
+                          val resp =
+                            ForwardHtlcInterceptResponse(ck,
+                                                         action = SETTLE,
+                                                         preimage = db.preimage)
+                          (resp, db.copy(settled = true))
+                        }
+                        .recover { _ =>
+                          paymentMap.remove(hash)
+                          val resp =
+                            ForwardHtlcInterceptResponse(ck, action = FAIL)
+                          (resp, db)
+                        }
+                  }
               }
+
+              for {
+                (resp, updatedDb) <- resF
+                res <- queue.offer(resp)
+                _ <- res match {
+                  case QueueOfferResult.Enqueued =>
+                    invoiceDAO.update(updatedDb)
+                  case QueueOfferResult.Dropped =>
+                    Future.failed(new RuntimeException(
+                      s"Dropped response for invoice ${db.hash.hex}"))
+                  case QueueOfferResult.Failure(ex) =>
+                    Future.failed(new RuntimeException(
+                      s"Failed to respond for invoice ${db.hash.hex}: ${ex.getMessage}"))
+                  case QueueOfferResult.QueueClosed =>
+                    Future.failed(new RuntimeException(
+                      s"Queue closed: failed to respond for invoice ${db.hash.hex}"))
+                }
+              } yield ()
+          }
         }
-      }
-      .runWith(Sink.ignore))
+        .runWith(Sink.ignore)
+    }
   }
 }
