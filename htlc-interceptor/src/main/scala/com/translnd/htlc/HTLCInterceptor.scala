@@ -137,7 +137,9 @@ class HTLCInterceptor(val lnds: Vector[LndRpcClient])(implicit
     val _ = lnds.map { lnd =>
       val (queue, source) =
         Source
-          .queue[ForwardHtlcInterceptResponse](200, OverflowStrategy.dropHead)
+          .queue[ForwardHtlcInterceptResponse](bufferSize = 200,
+                                               OverflowStrategy.dropHead,
+                                               maxConcurrentOffers = 10)
           .toMat(BroadcastHub.sink)(Keep.both)
           .run()
 
