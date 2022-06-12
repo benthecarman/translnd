@@ -93,8 +93,8 @@ class SphinxSpec extends AnyFunSuite {
     }
   }
 
-  val one =
-    hex"0100000000000000000000000000000000000000000000000000000000000000"
+  val one: ECPrivateKey = ECPrivateKey(
+    hex"0100000000000000000000000000000000000000000000000000000000000000")
 
   test("is last packet") {
     val testCases = Seq(
@@ -111,7 +111,7 @@ class SphinxSpec extends AnyFunSuite {
                        OnionRoutingPacket(0,
                                           publicKeys.head,
                                           ByteVector.empty,
-                                          Sha256Digest(one)),
+                                          Sha256Digest(one.bytes)),
                        one)),
       // Bolt 1.1 payloads currently also use the next packet's hmac to signal termination.
       (true,
@@ -126,21 +126,21 @@ class SphinxSpec extends AnyFunSuite {
                        OnionRoutingPacket(0,
                                           publicKeys.head,
                                           ByteVector.empty,
-                                          Sha256Digest(one)),
+                                          Sha256Digest(one.bytes)),
                        one)),
       (false,
        DecryptedPacket(hex"0100",
                        OnionRoutingPacket(0,
                                           publicKeys.head,
                                           ByteVector.empty,
-                                          Sha256Digest(one)),
+                                          Sha256Digest(one.bytes)),
                        one)),
       (false,
        DecryptedPacket(hex"0101",
                        OnionRoutingPacket(0,
                                           publicKeys.head,
                                           ByteVector.empty,
-                                          Sha256Digest(one)),
+                                          Sha256Digest(one.bytes)),
                        one))
     )
 

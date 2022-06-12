@@ -12,7 +12,7 @@ import scala.util._
 
 object Sphinx extends Logging {
 
-  val G = ECPublicKey(
+  val G: ECPublicKey = ECPublicKey(
     "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798")
 
   /** Supported packet version. Note that since this value is outside of the onion encrypted payload, intermediate
@@ -124,7 +124,7 @@ object Sphinx extends Logging {
   case class DecryptedPacket(
       payload: ByteVector,
       nextPacket: OnionRoutingPacket,
-      sharedSecret: ByteVector) {
+      sharedSecret: ECPrivateKey) {
     val isLastPacket: Boolean = nextPacket.hmac == Sha256Digest.empty
 
     lazy val tlvStream: Vector[TLV] = {
@@ -243,7 +243,7 @@ object Sphinx extends Logging {
                                                    nextPubKey,
                                                    nextOnionPayload,
                                                    Sha256Digest(hmac)),
-                                sharedSecret))
+                                ECPrivateKey(sharedSecret)))
             } else {
               Failure(
                 new RuntimeException(
