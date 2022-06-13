@@ -6,7 +6,6 @@ import com.typesafe.sbt.packager.docker.DockerPlugin.autoImport.dockerBaseImage
 import sbt.Keys._
 import sbt._
 import sbtassembly.AssemblyKeys._
-import sbtprotoc.ProtocPlugin.autoImport.PB
 
 import java.nio.file._
 import scala.util.Properties
@@ -48,17 +47,6 @@ object CommonSettings {
     Test / console / scalacOptions ++= (Compile / console / scalacOptions).value,
     Test / scalacOptions ++= testCompilerOpts(scalaVersion.value),
     licenses += ("MIT", url("https://opensource.org/licenses/MIT")),
-    //you need to build protoc manually to get it working on the new
-    //mac m1 chip. For instructions on how to do so see
-    //see: https://github.com/scalapb/ScalaPB/issues/1024
-    PB.protocExecutable := (
-      if (protocbridge.SystemDetector.detectedClassifier() == "osx-aarch_64")
-        file(
-          "/usr/local/bin/protoc"
-        ) // to change if needed, this is where protobuf manual compilation put it for me
-      else
-        PB.protocExecutable.value
-    ),
     assembly / test := {},
     resolvers += Resolver.sonatypeRepo("snapshots"),
     resolvers +=
