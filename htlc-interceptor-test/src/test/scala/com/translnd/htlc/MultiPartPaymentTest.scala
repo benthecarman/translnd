@@ -5,7 +5,10 @@ import org.bitcoins.core.currency.Satoshis
 import org.bitcoins.core.number.UInt32
 import org.bitcoins.core.protocol.ln.currency.MilliSatoshis
 import org.bitcoins.lnd.rpc.LndUtils
+import org.bitcoins.testkit.async.TestAsyncUtil
 import routerrpc.SendPaymentRequest
+
+import scala.concurrent.duration.DurationInt
 
 class MultiPartPaymentTest extends MppLndFixture with LndUtils {
 
@@ -30,6 +33,7 @@ class MultiPartPaymentTest extends MppLndFixture with LndUtils {
         noInflightUpdates = true
       )
       pay <- lndA.sendPayment(request)
+      _ <- TestAsyncUtil.nonBlockingSleep(5.seconds)
 
       invOpt <- htlc.lookupInvoice(invoice.lnTags.paymentHash.hash)
       postBal <- lnd.channelBalance()

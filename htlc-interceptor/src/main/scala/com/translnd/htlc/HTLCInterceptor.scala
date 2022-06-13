@@ -26,6 +26,7 @@ import scodec.bits._
 import slick.dbio.DBIO
 
 import scala.concurrent._
+import scala.concurrent.duration._
 import scala.util._
 
 class HTLCInterceptor(val lnds: Vector[LndRpcClient])(implicit
@@ -212,9 +213,18 @@ class HTLCInterceptor(val lnds: Vector[LndRpcClient])(implicit
                                             .map(_.toLong)
                                             .getOrElse(0L)
                                         },
-                                        maxTries = 1200)
+                                        interval = 100.milliseconds,
+                                        maxTries = 1200 // 2 minutes
+                        )
                         .map { _ =>
-                          paymentMap.remove(hash)
+                          // Schedule in 10 seconds because we need to
+                          // wait for other parts to finish
+                          val runnable: Runnable = () => {
+                            paymentMap.remove(hash)
+                            ()
+                          }
+                          system.scheduler.scheduleOnce(10.seconds, runnable)
+
                           val resp =
                             ForwardHtlcInterceptResponse(ck,
                                                          action = SETTLE,

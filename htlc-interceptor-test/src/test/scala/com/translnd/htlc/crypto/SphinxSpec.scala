@@ -36,23 +36,28 @@ class SphinxSpec extends AnyFunSuite {
     assert(ephkeys.head == ECPublicKey(
       hex"02eec7245d6b7d2ccb30380bfbe2a3648cd7a942653f5aa340edcea1f283686619"))
     assert(
-      sharedsecrets.head == hex"53eb63ea8a3fec3b3cd433b85cd62a4b145e1dda09391b348c4e1cd36a03ea66")
+      sharedsecrets.head == ECPrivateKey(
+        hex"53eb63ea8a3fec3b3cd433b85cd62a4b145e1dda09391b348c4e1cd36a03ea66"))
     assert(ephkeys(1) == ECPublicKey(
       hex"028f9438bfbf7feac2e108d677e3a82da596be706cc1cf342b75c7b7e22bf4e6e2"))
-    assert(sharedsecrets(
-      1) == hex"a6519e98832a0b179f62123b3567c106db99ee37bef036e783263602f3488fae")
+    assert(
+      sharedsecrets(1) == ECPrivateKey(
+        hex"a6519e98832a0b179f62123b3567c106db99ee37bef036e783263602f3488fae"))
     assert(ephkeys(2) == ECPublicKey(
       hex"03bfd8225241ea71cd0843db7709f4c222f62ff2d4516fd38b39914ab6b83e0da0"))
-    assert(sharedsecrets(
-      2) == hex"3a6b412548762f0dbccce5c7ae7bb8147d1caf9b5471c34120b30bc9c04891cc")
+    assert(
+      sharedsecrets(2) == ECPrivateKey(
+        hex"3a6b412548762f0dbccce5c7ae7bb8147d1caf9b5471c34120b30bc9c04891cc"))
     assert(ephkeys(3) == ECPublicKey(
       hex"031dde6926381289671300239ea8e57ffaf9bebd05b9a5b95beaf07af05cd43595"))
-    assert(sharedsecrets(
-      3) == hex"21e13c2d7cfe7e18836df50872466117a295783ab8aab0e7ecc8c725503ad02d")
+    assert(
+      sharedsecrets(3) == ECPrivateKey(
+        hex"21e13c2d7cfe7e18836df50872466117a295783ab8aab0e7ecc8c725503ad02d"))
     assert(ephkeys(4) == ECPublicKey(
       hex"03a214ebd875aab6ddfd77f22c5e7311d7f77f17a169e599f157bbcdae8bf071f4"))
-    assert(sharedsecrets(
-      4) == hex"b5756b9b542727dbafc6765a49488b023a725d631af688fc031217e90770c328")
+    assert(
+      sharedsecrets(4) == ECPrivateKey(
+        hex"b5756b9b542727dbafc6765a49488b023a725d631af688fc031217e90770c328"))
   }
 
   test("generate filler with fixed-size payloads (reference test vector)") {
@@ -337,14 +342,14 @@ class SphinxSpec extends AnyFunSuite {
     val blindingKey = ECPublicKey(
       hex"0362c0a046dacce86ddd0343c6d3c7c79c2208ba0d9c9cf24a6d046d21d21f90f7")
     assert(blindingSecret.publicKey == blindingKey)
-    val sharedSecret =
-      hex"2e83e9bc7821d3f6cec7301fa8493aee407557624fb5745bede9084852430e3f"
+    val sharedSecret = ECPrivateKey(
+      hex"2e83e9bc7821d3f6cec7301fa8493aee407557624fb5745bede9084852430e3f")
     assert(Sphinx.computeSharedSecret(nodeId, blindingSecret) == sharedSecret)
     assert(
       Sphinx.computeSharedSecret(blindingKey, nodePrivateKey) == sharedSecret)
     assert(
       Sphinx.mac(ByteVector("blinded_node_id".getBytes),
-                 sharedSecret) == Sha256Digest(
+                 sharedSecret.bytes) == Sha256Digest(
         hex"7d846b3445621d49a665e5698c52141e9dda8fa2fe0c3da7e0f9008ccc588a38"))
   }
 
@@ -359,14 +364,14 @@ class SphinxSpec extends AnyFunSuite {
     val blindingKey = ECPublicKey(
       hex"03fc5e56da97b462744c9a6b0ba9d5b3ffbfb1a08367af9cc6ea5ae03c79a78eec")
     assert(blindingSecret.publicKey == blindingKey)
-    val sharedSecret =
-      hex"f18a1ddb1cb27d8fc4faf2cf317e87524fcc6b7f053496d95bf6e6809d09851e"
+    val sharedSecret = ECPrivateKey(
+      hex"f18a1ddb1cb27d8fc4faf2cf317e87524fcc6b7f053496d95bf6e6809d09851e")
     assert(Sphinx.computeSharedSecret(nodeId, blindingSecret) == sharedSecret)
     assert(
       Sphinx.computeSharedSecret(blindingKey, nodePrivateKey) == sharedSecret)
     assert(
       Sphinx.mac(ByteVector("blinded_node_id".getBytes),
-                 sharedSecret) == Sha256Digest(
+                 sharedSecret.bytes) == Sha256Digest(
         hex"8074773a3745818b0d97dd875023486cc35e7afd95f5e9ec1363f517979e8373"))
   }
 
@@ -381,14 +386,14 @@ class SphinxSpec extends AnyFunSuite {
     val blindingKey = ECPublicKey(
       hex"02989c0b76cb563971fdc9bef31ec06c3560f3249d6ee9e5d83c57625596e05f6f")
     assert(blindingSecret.publicKey == blindingKey)
-    val sharedSecret =
-      hex"8c0f7716da996c4913d720dbf691b559a4945bf70cdd18e0b61e3e42635efc9c"
+    val sharedSecret = ECPrivateKey(
+      hex"8c0f7716da996c4913d720dbf691b559a4945bf70cdd18e0b61e3e42635efc9c")
     assert(Sphinx.computeSharedSecret(nodeId, blindingSecret) == sharedSecret)
     assert(
       Sphinx.computeSharedSecret(blindingKey, nodePrivateKey) == sharedSecret)
     assert(
       Sphinx.mac(ByteVector("blinded_node_id".getBytes),
-                 sharedSecret) == Sha256Digest(
+                 sharedSecret.bytes) == Sha256Digest(
         hex"02afb2187075c8af51488242194b44c02624785ccd6fd43b5796c68f3025bf88"))
   }
 }

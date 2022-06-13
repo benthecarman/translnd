@@ -26,10 +26,10 @@ object Sphinx extends Logging {
   def mac(key: ByteVector, message: ByteVector): Sha256Digest =
     Sha256Digest(Mac32.hmac256(key, message))
 
-  def generateKey(keyType: ByteVector, secret: ByteVector): ByteVector =
-    Mac32.hmac256(keyType, secret)
+  def generateKey(keyType: ByteVector, secret: ECPrivateKey): ByteVector =
+    Mac32.hmac256(keyType, secret.bytes)
 
-  def generateKey(keyType: String, secret: ByteVector): ByteVector =
+  def generateKey(keyType: String, secret: ECPrivateKey): ByteVector =
     generateKey(ByteVector.view(keyType.getBytes("UTF-8")), secret)
 
   def zeroes(length: Int): ByteVector = ByteVector.low(length)
@@ -39,14 +39,16 @@ object Sphinx extends Logging {
 
   def computeSharedSecret(
       pub: ECPublicKey,
-      secret: ECPrivateKey): ByteVector = {
+      secret: ECPrivateKey): ECPrivateKey = ECPrivateKey {
     CryptoUtil
       .sha256(CryptoUtil.tweakMultiply(pub, secret.fieldElement).bytes)
       .bytes
   }
 
-  def computeBlindingFactor(pub: ECPublicKey, secret: ByteVector): ByteVector =
-    CryptoUtil.sha256(pub.bytes ++ secret).bytes
+  def computeBlindingFactor(
+      pub: ECPublicKey,
+      secret: ECPrivateKey): ByteVector =
+    CryptoUtil.sha256(pub.bytes ++ secret.bytes).bytes
 
   def blind(pub: ECPublicKey, blindingFactor: ByteVector): ECPublicKey =
     CryptoUtil.tweakMultiply(pub, FieldElement.fromBytes(blindingFactor))
@@ -62,12 +64,12 @@ object Sphinx extends Logging {
     */
   def computeEphemeralECPublicKeysAndSharedSecrets(
       sessionKey: ECPrivateKey,
-      ECPublicKeys: Seq[ECPublicKey]): (Seq[ECPublicKey], Seq[ByteVector]) = {
+      pubKeys: Seq[ECPublicKey]): (Seq[ECPublicKey], Seq[ECPrivateKey]) = {
     val ephemeralECPublicKey0 = blind(G, sessionKey.bytes)
-    val secret0 = computeSharedSecret(ECPublicKeys.head, sessionKey)
+    val secret0 = computeSharedSecret(pubKeys.head, sessionKey)
     val blindingFactor0 = computeBlindingFactor(ephemeralECPublicKey0, secret0)
     computeEphemeralECPublicKeysAndSharedSecrets(sessionKey,
-                                                 ECPublicKeys.tail,
+                                                 pubKeys.tail,
                                                  Seq(ephemeralECPublicKey0),
                                                  Seq(blindingFactor0),
                                                  Seq(secret0))
@@ -76,22 +78,24 @@ object Sphinx extends Logging {
   @tailrec
   private def computeEphemeralECPublicKeysAndSharedSecrets(
       sessionKey: ECPrivateKey,
-      ECPublicKeys: Seq[ECPublicKey],
+      pubKeys: Seq[ECPublicKey],
       ephemeralECPublicKeys: Seq[ECPublicKey],
       blindingFactors: Seq[ByteVector],
-      sharedSecrets: Seq[ByteVector]): (Seq[ECPublicKey], Seq[ByteVector]) = {
-    if (ECPublicKeys.isEmpty)
+      sharedSecrets: Seq[ECPrivateKey]): (
+      Seq[ECPublicKey],
+      Seq[ECPrivateKey]) = {
+    if (pubKeys.isEmpty)
       (ephemeralECPublicKeys, sharedSecrets)
     else {
       val ephemeralECPublicKey =
         blind(ephemeralECPublicKeys.last, blindingFactors.last)
       val secret =
-        computeSharedSecret(blind(ECPublicKeys.head, blindingFactors),
-                            sessionKey)
-      val blindingFactor = computeBlindingFactor(ephemeralECPublicKey, secret)
+        computeSharedSecret(blind(pubKeys.head, blindingFactors), sessionKey)
+      val blindingFactor =
+        computeBlindingFactor(ephemeralECPublicKey, secret)
       computeEphemeralECPublicKeysAndSharedSecrets(
         sessionKey,
-        ECPublicKeys.tail,
+        pubKeys.tail,
         ephemeralECPublicKeys :+ ephemeralECPublicKey,
         blindingFactors :+ blindingFactor,
         sharedSecrets :+ secret)
@@ -158,7 +162,7 @@ object Sphinx extends Logging {
     */
   case class PacketAndSecrets(
       packet: OnionRoutingPacket,
-      sharedSecrets: Seq[(ByteVector, ECPublicKey)])
+      sharedSecrets: Seq[(ECPrivateKey, ECPublicKey)])
 
   /** Generate a deterministic filler to prevent intermediate nodes from knowing their position in the route.
     * See https://github.com/lightningnetwork/lightning-rfc/blob/master/04-onion-routing.md#filler-generation
@@ -172,7 +176,7 @@ object Sphinx extends Logging {
   def generateFiller(
       keyType: String,
       packetPayloadLength: Int,
-      sharedSecrets: Seq[ByteVector],
+      sharedSecrets: Seq[ECPrivateKey],
       payloads: Seq[ByteVector]): ByteVector = {
     require(sharedSecrets.length == payloads.length,
             "the number of secrets should equal the number of payloads")
@@ -243,7 +247,7 @@ object Sphinx extends Logging {
                                                    nextPubKey,
                                                    nextOnionPayload,
                                                    Sha256Digest(hmac)),
-                                ECPrivateKey(sharedSecret)))
+                                sharedSecret))
             } else {
               Failure(
                 new RuntimeException(
@@ -274,7 +278,7 @@ object Sphinx extends Logging {
       payload: ByteVector,
       associatedData: Option[ByteVector],
       ephemeralECPublicKey: ECPublicKey,
-      sharedSecret: ByteVector,
+      sharedSecret: ECPrivateKey,
       packet: Either[ByteVector, OnionRoutingPacket],
       onionPayloadFiller: ByteVector = ByteVector.empty): OnionRoutingPacket = {
     val packetPayloadLength = packet match {
@@ -313,7 +317,7 @@ object Sphinx extends Logging {
 
   def computeEphemeralPublicKeysAndSharedSecrets(
       sessionKey: ECPrivateKey,
-      publicKeys: Seq[ECPublicKey]): (Seq[ECPublicKey], Seq[ByteVector]) = {
+      publicKeys: Seq[ECPublicKey]): (Seq[ECPublicKey], Seq[ECPrivateKey]) = {
     val ephemeralPublicKey0 = blind(G, sessionKey.bytes)
     val secret0 = computeSharedSecret(publicKeys.head, sessionKey)
     val blindingFactor0 = computeBlindingFactor(ephemeralPublicKey0, secret0)
@@ -330,7 +334,9 @@ object Sphinx extends Logging {
       publicKeys: Seq[ECPublicKey],
       ephemeralPublicKeys: Seq[ECPublicKey],
       blindingFactors: Seq[ByteVector],
-      sharedSecrets: Seq[ByteVector]): (Seq[ECPublicKey], Seq[ByteVector]) = {
+      sharedSecrets: Seq[ECPrivateKey]): (
+      Seq[ECPublicKey],
+      Seq[ECPrivateKey]) = {
     if (publicKeys.isEmpty)
       (ephemeralPublicKeys, sharedSecrets)
     else {
@@ -361,13 +367,13 @@ object Sphinx extends Logging {
   def create(
       sessionKey: ECPrivateKey,
       packetPayloadLength: Int,
-      ECPublicKeys: Seq[ECPublicKey],
+      pubKeys: Seq[ECPublicKey],
       payloads: Seq[ByteVector],
       associatedData: Option[ByteVector]): PacketAndSecrets = {
     require(payloads.map(_.length + MacLength).sum <= packetPayloadLength,
             s"packet per-hop payloads cannot exceed $packetPayloadLength bytes")
     val (ephemeralECPublicKeys, sharedsecrets) =
-      computeEphemeralECPublicKeysAndSharedSecrets(sessionKey, ECPublicKeys)
+      computeEphemeralECPublicKeysAndSharedSecrets(sessionKey, pubKeys)
     val filler = generateFiller("rho",
                                 packetPayloadLength,
                                 sharedsecrets.dropRight(1),
@@ -375,7 +381,7 @@ object Sphinx extends Logging {
 
     // We deterministically-derive the initial payload bytes: see https://github.com/lightningnetwork/lightning-rfc/pull/697
     val startingBytes =
-      generateStream(generateKey("pad", sessionKey.bytes), packetPayloadLength)
+      generateStream(generateKey("pad", sessionKey), packetPayloadLength)
     val lastPacket = wrap(payloads.last,
                           associatedData,
                           ephemeralECPublicKeys.last,
@@ -387,7 +393,7 @@ object Sphinx extends Logging {
     def loop(
         hopPayloads: Seq[ByteVector],
         ephKeys: Seq[ECPublicKey],
-        sharedSecrets: Seq[ByteVector],
+        sharedSecrets: Seq[ECPrivateKey],
         packet: OnionRoutingPacket): OnionRoutingPacket = {
       if (hopPayloads.isEmpty) packet
       else {
@@ -407,6 +413,6 @@ object Sphinx extends Logging {
                       ephemeralECPublicKeys.dropRight(1),
                       sharedsecrets.dropRight(1),
                       lastPacket)
-    PacketAndSecrets(packet, sharedsecrets.zip(ECPublicKeys))
+    PacketAndSecrets(packet, sharedsecrets.zip(pubKeys))
   }
 }
