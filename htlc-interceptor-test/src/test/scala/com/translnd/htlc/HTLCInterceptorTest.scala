@@ -6,6 +6,9 @@ import lnrpc.SendRequest
 import org.bitcoins.core.currency.Satoshis
 import org.bitcoins.core.number.UInt32
 import org.bitcoins.lnd.rpc.LndUtils
+import org.bitcoins.testkit.async.TestAsyncUtil
+
+import scala.concurrent.duration.DurationInt
 
 class HTLCInterceptorTest extends TripleLndFixture with LndUtils {
 
@@ -72,6 +75,7 @@ class HTLCInterceptorTest extends TripleLndFixture with LndUtils {
 
       pay <- lndA.lnd.sendPaymentSync(
         SendRequest(paymentRequest = inv.toString))
+      _ <- TestAsyncUtil.nonBlockingSleep(5.seconds)
 
       invOpt <- htlc.lookupInvoice(inv.lnTags.paymentHash.hash)
       postBal <- lnd.channelBalance()
