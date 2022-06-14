@@ -37,9 +37,7 @@ trait MppLndFixture
             implicit val conf: TransLndAppConfig =
               TransLndAppConfig.fromDatadir(parent, Vector(pg))
 
-            conf.start().map { _ =>
-              new HTLCInterceptor(Vector(lnds._2))
-            }
+            conf.start().map(_ => HTLCInterceptor(Vector(lnds._2)))
           }
           _ = htlc.start()
         } yield (bitcoind, lnds._1, htlc)
@@ -48,7 +46,9 @@ trait MppLndFixture
         val (_, lndA, htlc) = param
         for {
           _ <- lndA.stop()
+          _ <- lndA.system.terminate()
           _ <- Future.sequence(htlc.lnds.map(_.stop()))
+          _ <- Future.sequence(htlc.lnds.map(_.system.terminate()))
         } yield ()
       }
     )(test)
