@@ -1,39 +1,21 @@
 package com.translnd.htlc
 
 import akka.stream.scaladsl.Sink
-import com.translnd.testkit.TripleLndFixture
-import lnrpc.Invoice.InvoiceState
+import com.translnd.testkit._
 import lnrpc.SendRequest
 import org.bitcoins.core.currency.Satoshis
 import org.bitcoins.core.number.UInt32
+import org.bitcoins.core.protocol.ln.currency.MilliSatoshis
 import org.bitcoins.lnd.rpc.LndUtils
 import org.bitcoins.testkit.async.TestAsyncUtil
+import routerrpc.SendPaymentRequest
 
 import scala.concurrent.duration.DurationInt
 
-class HTLCInterceptorTest extends TripleLndFixture with LndUtils {
-
-  it must "get info from all lnds" in { param =>
-    val (_, lndA, htlc, lndC) = param
-    val lndB = htlc.lnds.head
-
-    for {
-      infoA <- lndA.getInfo
-      infoB <- lndB.getInfo
-      infoC <- lndC.getInfo
-    } yield {
-      assert(infoA.identityPubkey != infoB.identityPubkey)
-      assert(infoA.identityPubkey != infoC.identityPubkey)
-      assert(infoB.identityPubkey != infoC.identityPubkey)
-
-      assert(infoA.blockHeight >= UInt32.zero)
-      assert(infoB.blockHeight >= UInt32.zero)
-      assert(infoC.blockHeight >= UInt32.zero)
-    }
-  }
+class DualLndTest extends DualLndFixture with LndUtils {
 
   it must "rotate keys" in { param =>
-    val (_, _, htlc, _) = param
+    val (_, _, htlc) = param
 
     val amount = Satoshis(1000)
 
@@ -43,25 +25,88 @@ class HTLCInterceptorTest extends TripleLndFixture with LndUtils {
     } yield assert(inv.nodeId != inv2.nodeId)
   }
 
-  it must "make an uninterrupted routed payment" in { param =>
-    val (_, lndA, _, lndC) = param
+  it must "receive a mpp payment" in { param =>
+    val (_, lndA, htlc) = param
+
+    // larger than channel size so it needs to be multiple parts
+    val amount: Satoshis = (CHANNEL_SIZE + Satoshis(1000)).satoshis
+
+    val lnd = htlc.lnds.head
 
     for {
-      inv <- lndC.addInvoice("hello world", Satoshis(100), 3600)
+      preBal <- lnd.channelBalance()
+      invoice <- htlc.createInvoice("hello world", amount, 3600)
 
-      pay <- lndA.lnd.sendPaymentSync(
-        SendRequest(paymentRequest = inv.invoice.toString))
+      request = SendPaymentRequest(
+        paymentRequest = invoice.toString,
+        timeoutSeconds = 60,
+        maxParts = UInt32(10),
+        maxShardSizeMsat = MilliSatoshis.fromSatoshis(CHANNEL_SIZE).toUInt64,
+        noInflightUpdates = true
+      )
+      pay <- lndA.sendPayment(request)
+      _ <- TestAsyncUtil.nonBlockingSleep(5.seconds)
 
-      inv <- lndC.lookupInvoice(inv.rHash)
+      invOpt <- htlc.lookupInvoice(invoice.lnTags.paymentHash.hash)
+      postBal <- lnd.channelBalance()
     } yield {
-      assert(pay.paymentError.isEmpty)
-      assert(inv.amtPaidSat == 100)
-      assert(inv.state == InvoiceState.SETTLED)
+      assert(pay.failureReason.isFailureReasonNone)
+      assert(preBal.localBalance + amount == postBal.localBalance)
+      invOpt match {
+        case Some(invoiceDb) =>
+          assert(invoiceDb.hash == invoice.lnTags.paymentHash.hash)
+          assert(invoiceDb.settled)
+        case None => fail("Invoice does not exist")
+      }
+    }
+  }
+
+  it must "receive an invoice subscription from a mpp payment" in { param =>
+    val (_, lndA, htlc) = param
+
+    val amount = Satoshis(100)
+
+    val lnd = htlc.lnds.head
+
+    val dbF = htlc
+      .subscribeInvoices()
+      .filter(_.settled)
+      .runWith(Sink.head)
+
+    for {
+      preBal <- lnd.channelBalance()
+      inv <- htlc.createInvoice("hello world", amount, 3600)
+
+      request = SendPaymentRequest(
+        paymentRequest = inv.toString,
+        timeoutSeconds = 60,
+        maxParts = UInt32(10),
+        maxShardSizeMsat = MilliSatoshis.fromSatoshis(CHANNEL_SIZE).toUInt64,
+        noInflightUpdates = true
+      )
+      pay <- lndA.sendPayment(request)
+      _ <- TestAsyncUtil.nonBlockingSleep(5.seconds)
+
+      invOpt <- htlc.lookupInvoice(inv.lnTags.paymentHash.hash)
+      postBal <- lnd.channelBalance()
+      db <- dbF
+    } yield {
+      assert(db.settled)
+      assert(db.hash == inv.lnTags.paymentHash.hash)
+      assert(pay.failureReason.isFailureReasonNone)
+      assert(preBal.localBalance + amount == postBal.localBalance)
+      invOpt match {
+        case Some(invoice) =>
+          assert(db == invoice)
+          assert(invoice.hash == inv.lnTags.paymentHash.hash)
+          assert(invoice.settled)
+        case None => fail("Invoice does not exist")
+      }
     }
   }
 
   it must "receive a payment" in { param =>
-    val (_, lndA, htlc, _) = param
+    val (_, lndA, htlc) = param
 
     val amount = Satoshis(100)
 
@@ -90,7 +135,7 @@ class HTLCInterceptorTest extends TripleLndFixture with LndUtils {
   }
 
   it must "receive an invoice subscription" in { param =>
-    val (_, lndA, htlc, _) = param
+    val (_, lndA, htlc) = param
 
     val amount = Satoshis(100)
 
@@ -128,7 +173,7 @@ class HTLCInterceptorTest extends TripleLndFixture with LndUtils {
   }
 
   it must "not allow an expired payment" in { param =>
-    val (_, lndA, htlc, _) = param
+    val (_, lndA, htlc) = param
 
     val amount = Satoshis(100)
 

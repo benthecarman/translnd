@@ -13,7 +13,7 @@ import org.scalatest.FutureOutcome
 
 import scala.concurrent.Future
 
-trait MppLndFixture
+trait DualLndFixture
     extends BitcoinSFixture
     with CachedBitcoindV21
     with TestUtil
