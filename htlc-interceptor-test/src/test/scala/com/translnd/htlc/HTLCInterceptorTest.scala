@@ -89,4 +89,20 @@ class HTLCInterceptorTest extends TripleLndFixture with LndUtils {
       }
     }
   }
+
+  it must "not allow an expired payment" in { param =>
+    val (_, lndA, htlc, _) = param
+
+    val amount = Satoshis(100)
+
+    htlc.startHTLCInterceptors()
+
+    for {
+      inv <- htlc.createInvoice("hello world", amount, 1)
+      _ <- TestAsyncUtil.nonBlockingSleep(5.seconds)
+
+      res <- recoverToSucceededIf[Exception](
+        lndA.lnd.sendPaymentSync(SendRequest(paymentRequest = inv.toString)))
+    } yield res
+  }
 }

@@ -63,7 +63,7 @@ class HTLCInterceptor(val lnds: Vector[LndRpcClient])(implicit
   def createInvoice(
       memo: String,
       amount: LnCurrencyUnit,
-      expiry: Long): Future[LnInvoice] = {
+      expirySeconds: Long): Future[LnInvoice] = {
     val dataF = for {
       network <- networkF
       nodeIds <- nodeIdsF
@@ -78,7 +78,7 @@ class HTLCInterceptor(val lnds: Vector[LndRpcClient])(implicit
 
       val hashTag = PaymentHashTag(hash)
       val memoTag = DescriptionTag(memo)
-      val expiryTimeTag = ExpiryTimeTag(UInt32(expiry))
+      val expiryTimeTag = ExpiryTimeTag(UInt32(expirySeconds))
       val paymentSecretTag = SecretTag(PaymentSecret(paymentSecret))
       val featuresTag = FeaturesTag(hex"2420") // copied from a LND invoice
 

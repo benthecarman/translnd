@@ -4,6 +4,7 @@ import com.translnd.htlc.FinalHopTLVStream
 import org.bitcoins.core.protocol.ln._
 import org.bitcoins.core.protocol.ln.channel.ShortChannelId
 import org.bitcoins.core.protocol.ln.currency._
+import org.bitcoins.core.util.TimeUtil
 import org.bitcoins.crypto._
 import org.bitcoins.lnd.rpc.LndUtils._
 import routerrpc.ResolveHoldForwardAction._
@@ -15,11 +16,13 @@ case class InvoiceDb(
     preimage: ByteVector,
     paymentSecret: PaymentSecret,
     amountOpt: Option[MilliSatoshis],
+    expireTimeOpt: Option[Long],
     invoice: LnInvoice,
     index: Int,
     settled: Boolean) {
   lazy val msats: MilliSatoshis = amountOpt.getOrElse(MilliSatoshis.zero)
 
+  /** Returns what action to */
   def getAction(
       req: ForwardHtlcInterceptRequest,
       finalHop: FinalHopTLVStream,
@@ -30,6 +33,7 @@ case class InvoiceDb(
     if (settled) {
       Some(SETTLE) // skip already settled invoices
     } else {
+      val now = TimeUtil.currentEpochSecond
       val wholeAmount = msats.toUInt64 <= req.outgoingAmountMsat &&
         finalHop.amtToForward.amt >= msats
 
@@ -40,7 +44,9 @@ case class InvoiceDb(
       val correctSecret =
         finalHop.paymentDataOpt.exists(_.paymentSecret == paymentSecret)
 
-      if (correctAmt && correctSecret && correctChanId) {
+      val notExpired = expireTimeOpt.forall(_ >= now)
+
+      if (correctAmt && correctSecret && correctChanId && notExpired) {
         if (wholeAmount) Some(SETTLE)
         else None
       } else Some(FAIL)
@@ -60,12 +66,19 @@ object InvoiceDbs {
       .getOrElse(throw new IllegalArgumentException(
         "Invoice must have a payment secret"))
 
-    InvoiceDb(invoice.lnTags.paymentHash.hash,
-              preimage = preimage,
-              index = idx,
-              paymentSecret = secret,
-              amountOpt = amountOpt,
-              invoice = invoice,
-              settled = false)
+    val expireTimeOpt = invoice.lnTags.expiryTime.map { t =>
+      TimeUtil.currentEpochSecond + t.u32.toLong
+    }
+
+    InvoiceDb(
+      invoice.lnTags.paymentHash.hash,
+      preimage = preimage,
+      index = idx,
+      paymentSecret = secret,
+      amountOpt = amountOpt,
+      expireTimeOpt = expireTimeOpt,
+      invoice = invoice,
+      settled = false
+    )
   }
 }
