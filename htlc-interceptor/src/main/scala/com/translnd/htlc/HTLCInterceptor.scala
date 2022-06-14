@@ -64,6 +64,15 @@ class HTLCInterceptor(val lnds: Vector[LndRpcClient])(implicit
 
   def createInvoice(
       memo: String,
+      amount: MilliSatoshis,
+      expiry: Long): Future[LnInvoice] = {
+    val ln = LnCurrencyUnits.fromMSat(amount)
+
+    createInvoice(memo, ln, expiry)
+  }
+
+  def createInvoice(
+      memo: String,
       amount: LnCurrencyUnit,
       expirySeconds: Long): Future[LnInvoice] = {
     val dataF = for {
