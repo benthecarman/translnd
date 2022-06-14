@@ -1,5 +1,6 @@
 package com.translnd.htlc
 
+import akka.NotUsed
 import akka.actor.ActorSystem
 import akka.stream._
 import akka.stream.scaladsl._
@@ -131,6 +132,18 @@ class HTLCInterceptor(val lnds: Vector[LndRpcClient])(implicit
     invoiceDAO.read(hash)
   }
 
+  private[this] val (invoiceQueue, invoiceSource) =
+    Source
+      .queue[InvoiceDb](bufferSize = 200,
+                        OverflowStrategy.dropHead,
+                        maxConcurrentOffers = 10)
+      .toMat(BroadcastHub.sink)(Keep.both)
+      .run()
+
+  def subscribeInvoices(): Source[InvoiceDb, NotUsed] = {
+    invoiceSource
+  }
+
   def readHTLC(
       hash: Sha256Digest): Future[Option[(InvoiceDb, Vector[ChannelIdDb])]] = {
     val action = invoiceDAO.findByPrimaryKeyAction(hash).flatMap {
@@ -146,7 +159,7 @@ class HTLCInterceptor(val lnds: Vector[LndRpcClient])(implicit
 
   override def start(): Unit = {
     val parallelism = Runtime.getRuntime.availableProcessors()
-    lnds.map { lnd =>
+    val _ = lnds.map { lnd =>
       val (queue, source) =
         Source
           .queue[ForwardHtlcInterceptResponse](bufferSize = 200,
@@ -190,12 +203,13 @@ class HTLCInterceptor(val lnds: Vector[LndRpcClient])(implicit
 
                   actionOpt match {
                     case Some(SETTLE) =>
-                      paymentMap.remove(hash)
                       val resp =
                         ForwardHtlcInterceptResponse(incomingCircuitKey = ck,
                                                      action = SETTLE,
                                                      preimage = db.preimage)
-                      Future.successful((resp, db.copy(settled = true)))
+                      val updatedDb = db.copy(settled = true)
+                      handleOnInvoicePaid(updatedDb, resp)
+                      Future.successful((resp, updatedDb))
                     case Some(FAIL) =>
                       val resp =
                         ForwardHtlcInterceptResponse(incomingCircuitKey = ck,
@@ -218,29 +232,30 @@ class HTLCInterceptor(val lnds: Vector[LndRpcClient])(implicit
                       paymentMap.addAndGet(hash, amt)
 
                       AsyncUtil
-                        .awaitCondition(() => {
-                                          val agg = paymentMap.get(hash)
-                                          agg >= db.amountOpt
-                                            .map(_.toLong)
-                                            .getOrElse(0L)
-                                        },
-                                        interval = 100.milliseconds,
-                                        maxTries = 1200 // 2 minutes
+                        .awaitCondition(
+                          () => {
+                            val agg = paymentMap.get(hash)
+                            agg >= db.amountOpt.map(_.toLong).getOrElse(0L)
+                          },
+                          interval = 100.milliseconds,
+                          maxTries = 1200 // 2 minutes
                         )
                         .map { _ =>
-                          // Schedule in 10 seconds because we need to
-                          // wait for other parts to finish
-                          val runnable: Runnable = () => {
-                            paymentMap.remove(hash)
-                            ()
-                          }
-                          system.scheduler.scheduleOnce(10.seconds, runnable)
-
                           val resp =
                             ForwardHtlcInterceptResponse(ck,
                                                          action = SETTLE,
                                                          preimage = db.preimage)
-                          (resp, db.copy(settled = true))
+                          val updatedDb = db.copy(settled = true)
+
+                          // Schedule for later because we need to
+                          // wait for other parts to finish
+                          val runnable: Runnable = () => {
+                            paymentMap.remove(hash)
+                            handleOnInvoicePaid(updatedDb, resp)
+                            ()
+                          }
+                          system.scheduler.scheduleOnce(1.seconds, runnable)
+                          (resp, updatedDb)
                         }
                         .recover { _ =>
                           paymentMap.remove(hash)
@@ -274,5 +289,32 @@ class HTLCInterceptor(val lnds: Vector[LndRpcClient])(implicit
     }
   }
 
+  private def handleOnInvoicePaid(
+      db: InvoiceDb,
+      response: ForwardHtlcInterceptResponse): Unit = {
+    response.action match {
+      case SETTLE =>
+        invoiceQueue.offer(db)
+        ()
+      case Unrecognized(_) | RESUME | FAIL =>
+        () // do nothing
+    }
+  }
+
   override def stop(): Unit = ()
+}
+
+object HTLCInterceptor {
+
+  def apply(lnds: Vector[LndRpcClient])(implicit
+      conf: TransLndAppConfig,
+      system: ActorSystem): HTLCInterceptor = {
+    new HTLCInterceptor(lnds)
+  }
+
+  def apply(lnd: LndRpcClient)(implicit
+      conf: TransLndAppConfig,
+      system: ActorSystem): HTLCInterceptor = {
+    new HTLCInterceptor(Vector(lnd))
+  }
 }

@@ -36,9 +36,7 @@ trait TripleLndFixture
             implicit val conf: TransLndAppConfig =
               TransLndAppConfig.fromDatadir(parent, Vector(pg))
 
-            conf.start().map { _ =>
-              new HTLCInterceptor(Vector(lnds._2))
-            }
+            conf.start().map(_ => HTLCInterceptor(Vector(lnds._2)))
           }
           _ = htlc.start()
         } yield (bitcoind, lnds._1, htlc, lnds._3)
@@ -47,8 +45,11 @@ trait TripleLndFixture
         val (_, lndA, htlc, lndC) = param
         for {
           _ <- lndA.stop()
+          _ <- lndA.system.terminate()
           _ <- Future.sequence(htlc.lnds.map(_.stop()))
+          _ <- Future.sequence(htlc.lnds.map(_.system.terminate()))
           _ <- lndC.stop()
+          _ <- lndC.system.terminate()
         } yield ()
       }
     )(test)

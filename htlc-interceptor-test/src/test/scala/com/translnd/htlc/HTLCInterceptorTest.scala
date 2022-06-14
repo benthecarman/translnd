@@ -1,5 +1,6 @@
 package com.translnd.htlc
 
+import akka.stream.scaladsl.Sink
 import com.translnd.testkit.TripleLndFixture
 import lnrpc.Invoice.InvoiceState
 import lnrpc.SendRequest
@@ -81,6 +82,45 @@ class HTLCInterceptorTest extends TripleLndFixture with LndUtils {
       assert(preBal.localBalance + amount == postBal.localBalance)
       invOpt match {
         case Some(invoice) =>
+          assert(invoice.hash == inv.lnTags.paymentHash.hash)
+          assert(invoice.settled)
+        case None => fail("Invoice does not exist")
+      }
+    }
+  }
+
+  it must "receive an invoice subscription" in { param =>
+    val (_, lndA, htlc, _) = param
+
+    val amount = Satoshis(100)
+
+    val lnd = htlc.lnds.head
+
+    val dbF = htlc
+      .subscribeInvoices()
+      .filter(_.settled)
+      .runWith(Sink.head)
+
+    for {
+      preBal <- lnd.channelBalance()
+      inv <- htlc.createInvoice("hello world", amount, 3600)
+
+      pay <- lndA.lnd.sendPaymentSync(
+        SendRequest(paymentRequest = inv.toString))
+      _ <- TestAsyncUtil.nonBlockingSleep(5.seconds)
+
+      invOpt <- htlc.lookupInvoice(inv.lnTags.paymentHash.hash)
+      postBal <- lnd.channelBalance()
+      db <- dbF
+    } yield {
+      assert(db.settled)
+      assert(db.hash == inv.lnTags.paymentHash.hash)
+      assert(pay.paymentError.isEmpty)
+      assert(preBal.localBalance + amount == postBal.localBalance)
+      invOpt match {
+        case Some(invoice) =>
+          assert(db == invoice)
+          assert(invoice.hash == inv.lnTags.paymentHash.hash)
           assert(invoice.settled)
         case None => fail("Invoice does not exist")
       }
