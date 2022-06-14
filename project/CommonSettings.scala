@@ -6,6 +6,8 @@ import com.typesafe.sbt.packager.docker.DockerPlugin.autoImport.dockerBaseImage
 import sbt.Keys._
 import sbt._
 import sbtassembly.AssemblyKeys._
+import xerial.sbt.Sonatype._
+import xerial.sbt.Sonatype.autoImport._
 
 import java.nio.file._
 import scala.util.Properties
@@ -27,6 +29,11 @@ object CommonSettings {
         url("https://twitter.com/benthecarman")
       )
     ),
+    sonatypeProfileName := "com.translnd",
+    sonatypeProjectHosting := Some(
+      GitHubHosting("benthecarman", "translnd", "benthecarman@live.com")),
+    sonatypeCredentialHost := "s01.oss.sonatype.org",
+    sonatypeRepository := "https://s01.oss.sonatype.org/service/local",
     Compile / scalacOptions ++= compilerOpts(scalaVersion = scalaVersion.value),
     Test / scalacOptions ++= testCompilerOpts(scalaVersion =
       scalaVersion.value),

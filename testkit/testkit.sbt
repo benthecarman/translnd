@@ -1,1 +1,1 @@
-skip in publish := true
+publish / skip := true

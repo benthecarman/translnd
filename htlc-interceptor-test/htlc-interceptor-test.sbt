@@ -7,3 +7,5 @@ Test / test := (Test / test dependsOn {
 Test / test := (Test / test dependsOn {
   root / TaskKeys.downloadLnd
 }).value
+
+publish / skip := true
