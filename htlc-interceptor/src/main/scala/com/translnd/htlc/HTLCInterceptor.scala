@@ -18,6 +18,7 @@ import org.bitcoins.core.protocol.ln.currency._
 import org.bitcoins.core.protocol.ln.fee._
 import org.bitcoins.core.protocol.ln.node._
 import org.bitcoins.core.protocol.ln.routing._
+import org.bitcoins.core.util.StartStop
 import org.bitcoins.crypto._
 import org.bitcoins.lnd.rpc._
 import routerrpc.ResolveHoldForwardAction._
@@ -33,6 +34,7 @@ class HTLCInterceptor(val lnds: Vector[LndRpcClient])(implicit
     conf: TransLndAppConfig,
     system: ActorSystem)
     extends LndUtils
+    with StartStop[Unit]
     with Logging {
   import system.dispatcher
 
@@ -133,9 +135,9 @@ class HTLCInterceptor(val lnds: Vector[LndRpcClient])(implicit
     invoiceDAO.safeDatabase.run(action)
   }
 
-  def startHTLCInterceptors(
-      parallelism: Int = Runtime.getRuntime.availableProcessors()): Unit = {
-    val _ = lnds.map { lnd =>
+  override def start(): Unit = {
+    val parallelism = Runtime.getRuntime.availableProcessors()
+    lnds.map { lnd =>
       val (queue, source) =
         Source
           .queue[ForwardHtlcInterceptResponse](bufferSize = 200,
@@ -262,4 +264,6 @@ class HTLCInterceptor(val lnds: Vector[LndRpcClient])(implicit
         .runWith(Sink.ignore)
     }
   }
+
+  override def stop(): Unit = ()
 }
