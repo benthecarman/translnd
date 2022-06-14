@@ -19,7 +19,6 @@ import org.bitcoins.core.protocol.ln.currency._
 import org.bitcoins.core.protocol.ln.fee._
 import org.bitcoins.core.protocol.ln.node._
 import org.bitcoins.core.protocol.ln.routing._
-import org.bitcoins.core.util.StartStop
 import org.bitcoins.crypto._
 import org.bitcoins.lnd.rpc._
 import routerrpc.ResolveHoldForwardAction._
@@ -31,11 +30,10 @@ import scala.concurrent._
 import scala.concurrent.duration._
 import scala.util._
 
-class HTLCInterceptor(val lnds: Vector[LndRpcClient])(implicit
+class HTLCInterceptor private (val lnds: Vector[LndRpcClient])(implicit
     conf: TransLndAppConfig,
     system: ActorSystem)
     extends LndUtils
-    with StartStop[Unit]
     with Logging {
   import system.dispatcher
 
@@ -157,7 +155,7 @@ class HTLCInterceptor(val lnds: Vector[LndRpcClient])(implicit
     invoiceDAO.safeDatabase.run(action)
   }
 
-  override def start(): Unit = {
+  private def start(): HTLCInterceptor = {
     val parallelism = Runtime.getRuntime.availableProcessors()
     val _ = lnds.map { lnd =>
       val (queue, source) =
@@ -293,7 +291,7 @@ class HTLCInterceptor(val lnds: Vector[LndRpcClient])(implicit
         dbs.map(invoiceQueue.offer)
       }
     }
-    ()
+    this
   }
 
   private def handleOnInvoicePaid(
@@ -307,8 +305,6 @@ class HTLCInterceptor(val lnds: Vector[LndRpcClient])(implicit
         () // do nothing
     }
   }
-
-  override def stop(): Unit = ()
 }
 
 object HTLCInterceptor {
@@ -316,12 +312,12 @@ object HTLCInterceptor {
   def apply(lnds: Vector[LndRpcClient])(implicit
       conf: TransLndAppConfig,
       system: ActorSystem): HTLCInterceptor = {
-    new HTLCInterceptor(lnds)
+    new HTLCInterceptor(lnds).start()
   }
 
   def apply(lnd: LndRpcClient)(implicit
       conf: TransLndAppConfig,
       system: ActorSystem): HTLCInterceptor = {
-    new HTLCInterceptor(Vector(lnd))
+    new HTLCInterceptor(Vector(lnd)).start()
   }
 }

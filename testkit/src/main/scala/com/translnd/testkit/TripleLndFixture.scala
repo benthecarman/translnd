@@ -38,7 +38,6 @@ trait TripleLndFixture
 
             conf.start().map(_ => HTLCInterceptor(Vector(lnds._2)))
           }
-          _ = htlc.start()
         } yield (bitcoind, lnds._1, htlc, lnds._3)
       },
       { param =>

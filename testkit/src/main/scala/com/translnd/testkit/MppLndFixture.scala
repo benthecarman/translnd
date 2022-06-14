@@ -39,7 +39,6 @@ trait MppLndFixture
 
             conf.start().map(_ => HTLCInterceptor(Vector(lnds._2)))
           }
-          _ = htlc.start()
         } yield (bitcoind, lnds._1, htlc)
       },
       { param =>
