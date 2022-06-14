@@ -9,11 +9,11 @@ import scala.util.Properties
 
 name := "translnd"
 
-version := "1.0"
-
 scalaVersion := "2.13.8"
 
 resolvers += Resolver.sonatypeRepo("snapshots")
+sonatypeCredentialHost := "s01.oss.sonatype.org"
+sonatypeRepository := "https://s01.oss.sonatype.org/service/local"
 
 enablePlugins(ReproducibleBuildsPlugin,
               JavaAppPackaging,
