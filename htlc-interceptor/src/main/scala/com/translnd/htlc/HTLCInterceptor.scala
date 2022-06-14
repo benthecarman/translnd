@@ -287,6 +287,13 @@ class HTLCInterceptor(val lnds: Vector[LndRpcClient])(implicit
         }
         .runWith(Sink.ignore)
     }
+    // start expired checker
+    system.scheduler.scheduleAtFixedRate(1.second, 1.second) { () =>
+      val _ = invoiceDAO.markInvoicesExpired().map { dbs =>
+        dbs.map(invoiceQueue.offer)
+      }
+    }
+    ()
   }
 
   private def handleOnInvoicePaid(

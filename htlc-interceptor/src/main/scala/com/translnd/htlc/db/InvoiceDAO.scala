@@ -3,6 +3,7 @@ package com.translnd.htlc.db
 import com.translnd.htlc.config.TransLndAppConfig
 import org.bitcoins.core.protocol.ln._
 import org.bitcoins.core.protocol.ln.currency.MilliSatoshis
+import org.bitcoins.core.util.TimeUtil
 import org.bitcoins.crypto._
 import org.bitcoins.db._
 import scodec.bits.ByteVector
@@ -36,6 +37,22 @@ case class InvoiceDAO()(implicit
       ts: Vector[InvoiceDb]): Query[InvoiceTable, InvoiceDb, Seq] =
     findByPrimaryKeys(ts.map(_.hash))
 
+  def markInvoicesExpired(): Future[Vector[InvoiceDb]] = {
+    val now = TimeUtil.currentEpochSecond
+    val findAction = table
+      .filter(_.expireTime < now)
+      .filterNot(_.expired)
+      .filterNot(_.settled)
+      .result
+      .map(_.toVector)
+
+    val action = findAction.flatMap { dbs =>
+      val updated = dbs.map(_.copy(expired = true))
+      updateAllAction(updated)
+    }
+    safeDatabase.runVec(action)
+  }
+
   def maxIndex(): Future[Option[Int]] = {
     val query = table.map(_.idx).max
 
@@ -59,10 +76,20 @@ case class InvoiceDAO()(implicit
 
     def idx: Rep[Int] = column("idx", O.Unique)
 
+    def expired: Rep[Boolean] = column("expired")
+
     def settled: Rep[Boolean] = column("settled")
 
     def * : ProvenShape[InvoiceDb] =
-      (hash, preimage, paymentSecret, amount, expireTime, invoice, idx, settled)
+      (hash,
+       preimage,
+       paymentSecret,
+       amount,
+       expireTime,
+       invoice,
+       idx,
+       expired,
+       settled)
         .<>(InvoiceDb.tupled, InvoiceDb.unapply)
   }
 }

@@ -132,12 +132,21 @@ class HTLCInterceptorTest extends TripleLndFixture with LndUtils {
 
     val amount = Satoshis(100)
 
+    val dbF = htlc
+      .subscribeInvoices()
+      .filter(_.expired)
+      .runWith(Sink.head)
+
     for {
       inv <- htlc.createInvoice("hello world", amount, 1)
       _ <- TestAsyncUtil.nonBlockingSleep(5.seconds)
 
-      res <- recoverToSucceededIf[Exception](
+      _ <- recoverToSucceededIf[Exception](
         lndA.lnd.sendPaymentSync(SendRequest(paymentRequest = inv.toString)))
-    } yield res
+      db <- dbF
+    } yield {
+      assert(db.expired)
+      assert(db.invoice == inv)
+    }
   }
 }
