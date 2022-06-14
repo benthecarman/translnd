@@ -19,7 +19,10 @@ case class InvoiceDb(
     expireTimeOpt: Option[Long],
     invoice: LnInvoice,
     index: Int,
+    expired: Boolean,
     settled: Boolean) {
+  require(!(settled && expired), "invoice cannot be both settled and expired")
+
   lazy val msats: MilliSatoshis = amountOpt.getOrElse(MilliSatoshis.zero)
 
   /** Returns what action to */
@@ -78,6 +81,7 @@ object InvoiceDbs {
       amountOpt = amountOpt,
       expireTimeOpt = expireTimeOpt,
       invoice = invoice,
+      expired = false,
       settled = false
     )
   }
