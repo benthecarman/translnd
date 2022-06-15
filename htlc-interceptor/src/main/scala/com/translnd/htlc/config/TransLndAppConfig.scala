@@ -11,10 +11,7 @@ import org.bitcoins.crypto._
 import org.bitcoins.db._
 import org.bitcoins.keymanager.bip39.BIP39KeyManager
 import org.bitcoins.keymanager.config.KeyManagerAppConfig
-import org.bitcoins.lnd.rpc.LndRpcClient
-import org.bitcoins.lnd.rpc.config._
 
-import java.io.File
 import java.nio.file._
 import scala.concurrent._
 import scala.util.Properties
@@ -45,12 +42,6 @@ case class TransLndAppConfig(
   /** The path to our encrypted mnemonic seed */
   lazy val seedPath: Path = kmConf.seedPath
 
-  lazy val lndDataDir: Path =
-    Paths.get(config.getString(s"bitcoin-s.lnd.datadir"))
-
-  lazy val lndBinary: File =
-    Paths.get(config.getString(s"bitcoin-s.lnd.binary")).toFile
-
   override def start(): Future[Unit] = {
     logger.info(s"Initializing setup")
 
@@ -64,7 +55,7 @@ case class TransLndAppConfig(
                                  bip39PasswordOpt = bip39PasswordOpt)
     }
 
-    val numMigrations = migrate()
+    val numMigrations = migrate().migrationsExecuted
     logger.info(s"Applied $numMigrations")
 
     Future.unit
@@ -79,12 +70,6 @@ case class TransLndAppConfig(
   lazy val bip39PasswordOpt: Option[String] = kmConf.bip39PasswordOpt
 
   override lazy val dbPath: Path = baseDatadir
-
-  lazy val lndInstance: LndInstance =
-    LndInstanceLocal.fromDataDir(lndDataDir.toFile)
-
-  lazy val lndRpcClient: LndRpcClient =
-    new LndRpcClient(lndInstance, Some(lndBinary))
 
   override val allTables: List[TableQuery[Table[_]]] = {
     val invoiceTable: TableQuery[Table[_]] = InvoiceDAO()(ec, this).table
