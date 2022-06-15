@@ -29,6 +29,9 @@ object Deps {
       "org.bitcoin-s" %% "bitcoin-s-db-commons" % V.bitcoinsV withSources () withJavadoc ()
   }
 
+  val channelIds: List[ModuleID] =
+    List(Compile.bitcoinsAppCommons, Compile.grizzledSlf4j)
+
   val htlcInterceptor: List[ModuleID] =
     List(Compile.bitcoinsKeyManager,
          Compile.bitcoinsLnd,
