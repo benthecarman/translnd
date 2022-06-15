@@ -1,5 +1,4 @@
 import com.typesafe.sbt.packager.windows._
-import sbt.Resolver
 import java.nio.file.Files
 import java.security.MessageDigest
 import scala.collection.JavaConverters._
@@ -48,11 +47,15 @@ wixFeatures += WindowsFeature(
 lazy val root = project
   .in(file("."))
   .aggregate(
+    channelIds,
+    channelIdsTest,
     htlcInterceptor,
     htlcInterceptorTest,
     testkit
   )
   .dependsOn(
+    channelIds,
+    channelIdsTest,
     htlcInterceptor,
     htlcInterceptorTest,
     testkit
@@ -63,11 +66,23 @@ lazy val root = project
     publish / skip := true
   )
 
+lazy val channelIds = project
+  .in(file("channel-ids"))
+  .settings(CommonSettings.settings: _*)
+  .settings(name := "channel-ids", libraryDependencies ++= Deps.channelIds)
+
+lazy val channelIdsTest = project
+  .in(file("channel-ids-test"))
+  .settings(CommonSettings.testSettings: _*)
+  .settings(name := "channel-ids-test", libraryDependencies ++= Deps.testkit)
+  .dependsOn(channelIds)
+
 lazy val htlcInterceptor = project
   .in(file("htlc-interceptor"))
   .settings(CommonSettings.settings: _*)
   .settings(name := "htlcInterceptor",
             libraryDependencies ++= Deps.htlcInterceptor)
+  .dependsOn(channelIds)
 
 lazy val htlcInterceptorTest = project
   .in(file("htlc-interceptor-test"))

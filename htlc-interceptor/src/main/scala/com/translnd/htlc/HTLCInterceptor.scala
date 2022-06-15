@@ -5,6 +5,7 @@ import akka.actor.ActorSystem
 import akka.stream._
 import akka.stream.scaladsl._
 import com.google.common.util.concurrent.AtomicLongMap
+import com.translnd.channel.ids.ExistingChannelId
 import com.translnd.htlc.config._
 import com.translnd.htlc.crypto.Sphinx
 import com.translnd.htlc.db._
@@ -93,7 +94,7 @@ class HTLCInterceptor private (val lnds: Vector[LndRpcClient])(implicit
       val featuresTag = FeaturesTag(hex"2420") // copied from a LND invoice
 
       val routes = nodeIds.map { nodeId =>
-        val chanId = ExistingChannelIds.getChannelId(amount.toSatoshis)
+        val chanId = ExistingChannelId.getChannelId(amount.toSatoshis)
         LnRoute(
           pubkey = nodeId.pubKey,
           shortChannelID = chanId,
