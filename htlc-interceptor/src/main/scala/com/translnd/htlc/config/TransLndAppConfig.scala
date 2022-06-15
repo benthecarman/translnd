@@ -86,8 +86,12 @@ case class TransLndAppConfig(
   lazy val lndRpcClient: LndRpcClient =
     new LndRpcClient(lndInstance, Some(lndBinary))
 
-  override val allTables: List[TableQuery[Table[_]]] =
-    List(InvoiceDAO()(ec, this).table)
+  override val allTables: List[TableQuery[Table[_]]] = {
+    val invoiceTable: TableQuery[Table[_]] = InvoiceDAO()(ec, this).table
+    val channelIdTable: TableQuery[Table[_]] = ChannelIdDAO()(ec, this).table
+
+    List(invoiceTable, channelIdTable)
+  }
 }
 
 object TransLndAppConfig
