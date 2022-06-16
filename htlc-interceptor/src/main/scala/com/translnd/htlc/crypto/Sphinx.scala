@@ -24,10 +24,10 @@ object Sphinx extends Logging {
   val MacLength = 32
 
   def mac(key: ByteVector, message: ByteVector): Sha256Digest =
-    Sha256Digest(Mac32.hmac256(key, message))
+    Sha256Digest(CryptoUtil.hmac256(key, message))
 
   def generateKey(keyType: ByteVector, secret: ECPrivateKey): ByteVector =
-    Mac32.hmac256(keyType, secret.bytes)
+    CryptoUtil.hmac256(keyType, secret.bytes)
 
   def generateKey(keyType: String, secret: ECPrivateKey): ByteVector =
     generateKey(ByteVector.view(keyType.getBytes("UTF-8")), secret)
