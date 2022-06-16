@@ -4,13 +4,14 @@ import org.bitcoins.core.currency.Satoshis
 import org.bitcoins.core.protocol.ln.channel.ShortChannelId
 import org.bitcoins.commons.serializers.JsonReaders._
 import org.bitcoins.core.protocol.BigSizeUInt
+import org.bitcoins.core.util.TimeUtil
 import org.bitcoins.crypto.{Factory, NetworkElement}
 import play.api.libs.json._
 import scodec.bits.ByteVector
 
 import java.nio.file.{Files, Path, Paths}
 import scala.annotation.tailrec
-import scala.util.{Properties, Random}
+import scala.util.{Properties, Random, Try}
 import scala.io.Source
 import scala.reflect.io.Directory
 
@@ -80,12 +81,22 @@ object ExistingChannelId extends Factory[ExistingChannelId] {
     loop(Vector.empty, bytes)
   }
 
-  def getChannelId(amount: Satoshis): ShortChannelId = {
-    val shuffled = Random.shuffle(all)
+  private val random: Random = new Random(TimeUtil.currentEpochMs)
+
+  def getChannelId(amount: Satoshis): ShortChannelId = Try {
+    val shuffled = random.shuffle(all)
     val bestOpt = shuffled.find(_.amount > amount * Satoshis(2)).map(_.scid)
     val secondBestOpt = shuffled.find(_.amount > amount).map(_.scid)
 
-    bestOpt.orElse(secondBestOpt).getOrElse(shuffled.head.scid)
+    bestOpt.orElse(secondBestOpt).get
+  }.getOrElse(genChannelId()) // if we fail, use an alias
+
+  def genChannelId(): ShortChannelId = {
+    val blockHeight = random.between(500000L, 750000L)
+    val txIndex = random.between(1, 2000)
+    val outputIndex = random.between(0, 10)
+
+    ShortChannelId(BigInt(blockHeight), txIndex, outputIndex)
   }
 
   private lazy val jsonResource: Vector[ExistingChannelId] = {
