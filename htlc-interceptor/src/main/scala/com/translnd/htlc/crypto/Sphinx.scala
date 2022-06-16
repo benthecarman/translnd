@@ -12,9 +12,6 @@ import scala.util._
 
 object Sphinx extends Logging {
 
-  val G: ECPublicKey = ECPublicKey(
-    "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798")
-
   /** Supported packet version. Note that since this value is outside of the onion encrypted payload, intermediate
     * nodes may or may not use this value when forwarding the packet to the next node.
     */
@@ -65,7 +62,7 @@ object Sphinx extends Logging {
   def computeEphemeralECPublicKeysAndSharedSecrets(
       sessionKey: ECPrivateKey,
       pubKeys: Seq[ECPublicKey]): (Seq[ECPublicKey], Seq[ECPrivateKey]) = {
-    val ephemeralECPublicKey0 = blind(G, sessionKey.bytes)
+    val ephemeralECPublicKey0 = blind(CryptoParams.getG, sessionKey.bytes)
     val secret0 = computeSharedSecret(pubKeys.head, sessionKey)
     val blindingFactor0 = computeBlindingFactor(ephemeralECPublicKey0, secret0)
     computeEphemeralECPublicKeysAndSharedSecrets(sessionKey,
@@ -318,7 +315,7 @@ object Sphinx extends Logging {
   def computeEphemeralPublicKeysAndSharedSecrets(
       sessionKey: ECPrivateKey,
       publicKeys: Seq[ECPublicKey]): (Seq[ECPublicKey], Seq[ECPrivateKey]) = {
-    val ephemeralPublicKey0 = blind(G, sessionKey.bytes)
+    val ephemeralPublicKey0 = blind(CryptoParams.getG, sessionKey.bytes)
     val secret0 = computeSharedSecret(publicKeys.head, sessionKey)
     val blindingFactor0 = computeBlindingFactor(ephemeralPublicKey0, secret0)
     computeEphemeralPublicKeysAndSharedSecrets(sessionKey,
