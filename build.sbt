@@ -50,7 +50,7 @@ lazy val channelIdsTest = project
 lazy val htlcInterceptor = project
   .in(file("htlc-interceptor"))
   .settings(CommonSettings.settings: _*)
-  .settings(name := "htlcInterceptor",
+  .settings(name := "htlc-interceptor",
             libraryDependencies ++= Deps.htlcInterceptor)
   .dependsOn(channelIds)
 
