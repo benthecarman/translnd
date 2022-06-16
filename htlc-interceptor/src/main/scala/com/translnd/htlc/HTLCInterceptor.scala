@@ -262,7 +262,10 @@ class HTLCInterceptor private (val lnds: Vector[LndRpcClient])(implicit
                         ForwardHtlcInterceptResponse(incomingCircuitKey = ck,
                                                      action = SETTLE,
                                                      preimage = db.preimage)
-                      val updatedDb = db.copy(state = Paid)
+                      val amtPaid =
+                        MilliSatoshis(request.outgoingAmountMsat.toBigInt)
+                      val updatedDb =
+                        db.copy(state = Paid, amountPaidOpt = Some(amtPaid))
                       handleOnInvoicePaid(updatedDb, resp)
                       Future.successful((resp, updatedDb))
                     case Some(FAIL) =>
@@ -300,7 +303,10 @@ class HTLCInterceptor private (val lnds: Vector[LndRpcClient])(implicit
                             ForwardHtlcInterceptResponse(ck,
                                                          action = SETTLE,
                                                          preimage = db.preimage)
-                          val updatedDb = db.copy(state = Paid)
+
+                          val amtPaid = MilliSatoshis(paymentMap.get(hash))
+                          val updatedDb =
+                            db.copy(state = Paid, amountPaidOpt = Some(amtPaid))
 
                           // Schedule for later because we need to
                           // wait for other parts to finish

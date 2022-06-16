@@ -4,6 +4,7 @@ CREATE TABLE invoices
     preimage       TEXT UNIQUE      NOT NULL,
     payment_secret TEXT UNIQUE      NOT NULL,
     amount         INTEGER,
+    amount_paid    INTEGER,
     expire_time    INTEGER,
     invoice        TEXT UNIQUE      NOT NULL,
     idx            INTEGER UNIQUE   NOT NULL,

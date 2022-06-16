@@ -17,6 +17,7 @@ case class InvoiceDb(
     preimage: ByteVector,
     paymentSecret: PaymentSecret,
     amountOpt: Option[MilliSatoshis],
+    amountPaidOpt: Option[MilliSatoshis],
     expireTimeOpt: Option[Long],
     invoice: LnInvoice,
     index: Int,
@@ -82,6 +83,7 @@ object InvoiceDbs {
       index = idx,
       paymentSecret = secret,
       amountOpt = amountOpt,
+      amountPaidOpt = None,
       expireTimeOpt = expireTimeOpt,
       invoice = invoice,
       state = Unpaid
