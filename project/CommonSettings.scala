@@ -38,9 +38,7 @@ object CommonSettings {
     Test / scalacOptions ++= testCompilerOpts(scalaVersion.value),
     licenses += ("MIT", url("https://opensource.org/licenses/MIT")),
     assembly / test := {},
-    resolvers += Resolver.sonatypeRepo("snapshots"),
-    resolvers +=
-      "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots"
+    resolvers += Resolver.sonatypeRepo("snapshots")
   )
 
   private val commonCompilerOpts = {
