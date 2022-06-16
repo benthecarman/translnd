@@ -20,9 +20,7 @@ case class InvoiceDAO()(implicit
   import profile.api._
 
   private val mappers = new DbCommonsColumnMappers(profile)
-  private val mappers2 = new DbMappers(profile)
   import mappers._
-  import mappers2._
 
   override val table: TableQuery[InvoiceTable] = TableQuery[InvoiceTable]
 

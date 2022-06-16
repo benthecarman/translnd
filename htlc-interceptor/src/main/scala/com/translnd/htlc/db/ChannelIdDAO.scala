@@ -16,9 +16,7 @@ case class ChannelIdDAO()(implicit
   import profile.api._
 
   private val mappers = new DbCommonsColumnMappers(profile)
-  private val mappers2 = new DbMappers(profile)
   import mappers._
-  import mappers2._
 
   override val table: TableQuery[ChannelIdTable] = TableQuery[ChannelIdTable]
 
