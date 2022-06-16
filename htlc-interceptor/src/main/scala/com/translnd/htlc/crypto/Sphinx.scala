@@ -38,7 +38,7 @@ object Sphinx extends Logging {
       pub: ECPublicKey,
       secret: ECPrivateKey): ECPrivateKey = ECPrivateKey {
     CryptoUtil
-      .sha256(CryptoUtil.tweakMultiply(pub, secret.fieldElement).bytes)
+      .sha256(pub.multiply(secret.fieldElement).bytes)
       .bytes
   }
 
@@ -47,8 +47,9 @@ object Sphinx extends Logging {
       secret: ECPrivateKey): ByteVector =
     CryptoUtil.sha256(pub.bytes ++ secret.bytes).bytes
 
-  def blind(pub: ECPublicKey, blindingFactor: ByteVector): ECPublicKey =
-    CryptoUtil.tweakMultiply(pub, FieldElement.fromBytes(blindingFactor))
+  def blind(pub: ECPublicKey, blindingFactor: ByteVector): ECPublicKey = {
+    pub.multiply(FieldElement.fromBytes(blindingFactor))
+  }
 
   def blind(
       pub: ECPublicKey,
