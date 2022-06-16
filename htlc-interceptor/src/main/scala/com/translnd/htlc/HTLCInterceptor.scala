@@ -53,13 +53,32 @@ class HTLCInterceptor private (val lnds: Vector[LndRpcClient])(implicit
     Future.sequence(lnds.map(_.nodeId))
 
   def createInvoice(
+      descHash: Sha256Digest,
+      amount: CurrencyUnit,
+      expiry: Long): Future[LnInvoice] = {
+    val ln =
+      LnCurrencyUnits.fromMSat(MilliSatoshis.fromSatoshis(amount.satoshis))
+
+    createInvoice(None, Some(descHash), ln, expiry)
+  }
+
+  def createInvoice(
+      descHash: Sha256Digest,
+      amount: MilliSatoshis,
+      expiry: Long): Future[LnInvoice] = {
+    val ln = LnCurrencyUnits.fromMSat(amount)
+
+    createInvoice(None, Some(descHash), ln, expiry)
+  }
+
+  def createInvoice(
       memo: String,
       amount: CurrencyUnit,
       expiry: Long): Future[LnInvoice] = {
     val ln =
       LnCurrencyUnits.fromMSat(MilliSatoshis.fromSatoshis(amount.satoshis))
 
-    createInvoice(memo, ln, expiry)
+    createInvoice(Some(memo), None, ln, expiry)
   }
 
   def createInvoice(
@@ -68,13 +87,22 @@ class HTLCInterceptor private (val lnds: Vector[LndRpcClient])(implicit
       expiry: Long): Future[LnInvoice] = {
     val ln = LnCurrencyUnits.fromMSat(amount)
 
-    createInvoice(memo, ln, expiry)
+    createInvoice(Some(memo), None, ln, expiry)
   }
 
   def createInvoice(
-      memo: String,
+      memoOpt: Option[String],
+      descHashOpt: Option[Sha256Digest],
       amount: LnCurrencyUnit,
       expirySeconds: Long): Future[LnInvoice] = {
+    require(
+      (memoOpt.nonEmpty && memoOpt.get.length < 640) ||
+        descHashOpt.nonEmpty,
+      "You must supply either a description hash, or a literal description that is 640 characters or less to create an invoice."
+    )
+    require(!(memoOpt.nonEmpty && descHashOpt.nonEmpty),
+            "Cannot have both description and description hash")
+
     val dataF = for {
       network <- networkF
       nodeIds <- nodeIdsF
@@ -88,7 +116,8 @@ class HTLCInterceptor private (val lnds: Vector[LndRpcClient])(implicit
       val paymentSecret = ECPrivateKey.freshPrivateKey.bytes
 
       val hashTag = PaymentHashTag(hash)
-      val memoTag = DescriptionTag(memo)
+      val memoTagOpt = memoOpt.map(DescriptionTag)
+      val descHashTagOpt = descHashOpt.map(DescriptionHashTag)
       val expiryTimeTag = ExpiryTimeTag(UInt32(expirySeconds))
       val paymentSecretTag = SecretTag(PaymentSecret(paymentSecret))
       val featuresTag = FeaturesTag(hex"2420") // copied from a LND invoice
@@ -104,6 +133,8 @@ class HTLCInterceptor private (val lnds: Vector[LndRpcClient])(implicit
         )
       }
       val routingInfo = RoutingInfo(routes)
+
+      val memoTag = memoTagOpt.orElse(descHashTagOpt).get
 
       val tags = LnTaggedFields(
         Vector(hashTag,
