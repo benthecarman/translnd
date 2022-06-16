@@ -1,11 +1,11 @@
-val root = project in file("..")
+val translnd = project in file("..")
 
 Test / test := (Test / test dependsOn {
-  root / TaskKeys.downloadBitcoind
+  translnd / TaskKeys.downloadBitcoind
 }).value
 
 Test / test := (Test / test dependsOn {
-  root / TaskKeys.downloadLnd
+  translnd / TaskKeys.downloadLnd
 }).value
 
 publish / skip := true
