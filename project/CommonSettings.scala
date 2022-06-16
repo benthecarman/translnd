@@ -1,12 +1,7 @@
-// these two imports are needed for sbt syntax to work
-import com.typesafe.sbt.SbtNativePackager.Docker
-import com.typesafe.sbt.SbtNativePackager.autoImport.packageName
 import com.typesafe.sbt.packager.Keys._
-import com.typesafe.sbt.packager.docker.DockerPlugin.autoImport.dockerBaseImage
 import sbt.Keys._
 import sbt._
 import sbtassembly.AssemblyKeys._
-import xerial.sbt.Sonatype._
 import xerial.sbt.Sonatype.autoImport._
 
 import java.nio.file._
@@ -15,7 +10,6 @@ import scala.util.Properties
 object CommonSettings {
 
   lazy val settings: Vector[Setting[_]] = Vector(
-    version := "0.1.0",
     scalaVersion := "2.13.8",
     organization := "com.translnd",
     homepage := Some(url("https://github.com/benthecarman/translnd")),
@@ -29,28 +23,17 @@ object CommonSettings {
         url("https://twitter.com/benthecarman")
       )
     ),
-    sonatypeProfileName := "com.translnd",
-    sonatypeProjectHosting := Some(
-      GitHubHosting("benthecarman", "translnd", "benthecarman@live.com")),
     sonatypeCredentialHost := "s01.oss.sonatype.org",
     sonatypeRepository := "https://s01.oss.sonatype.org/service/local",
     Compile / scalacOptions ++= compilerOpts(scalaVersion = scalaVersion.value),
     Test / scalacOptions ++= testCompilerOpts(scalaVersion =
       scalaVersion.value),
-    //remove annoying import unused things in the scala console
-    //https://stackoverflow.com/questions/26940253/in-sbt-how-do-you-override-scalacoptions-for-console-in-all-configurations
     Compile / console / scalacOptions ~= (_ filterNot (s =>
       s == "-Ywarn-unused-import"
         || s == "-Ywarn-unused"
         || s == "-Xfatal-warnings"
         //for 2.13 -- they use different compiler opts
         || s == "-Xlint:unused")),
-    //we don't want -Xfatal-warnings for publishing with publish/publishLocal either
-//    Compile / doc / scalacOptions ~= (_ filterNot (s =>
-//      s == "-Xfatal-warnings")),
-    //silence all scaladoc warnings generated from invalid syntax
-    //see: https://github.com/bitcoin-s/bitcoin-s/issues/3232
-//    Compile / doc / scalacOptions ++= Vector(s"-Wconf:any:ws"),
     Test / console / scalacOptions ++= (Compile / console / scalacOptions).value,
     Test / scalacOptions ++= testCompilerOpts(scalaVersion.value),
     licenses += ("MIT", url("https://opensource.org/licenses/MIT")),
@@ -58,27 +41,6 @@ object CommonSettings {
     resolvers += Resolver.sonatypeRepo("snapshots"),
     resolvers +=
       "Sonatype OSS Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots"
-  )
-
-  lazy val jvmSettings: Seq[Setting[_]] = List(
-    ////
-    // scaladoc settings
-    Compile / doc / scalacOptions ++= List(
-      "-doc-title",
-      "translnd",
-      "-doc-version",
-      version.value
-    ),
-    // Set apiURL to define the base URL for the Scaladocs for our library.
-    // This will enable clients of our library to automatically link against
-    // the API documentation using autoAPIMappings.
-    apiURL := homepage.value.map(_.toString + "/api").map(url),
-    // scaladoc settings end
-    ////
-    Compile / compile / javacOptions ++= {
-      //https://github.com/eclipse/jetty.project/issues/3244#issuecomment-495322586
-      Seq("--release", "8")
-    }
   )
 
   private val commonCompilerOpts = {
@@ -151,26 +113,6 @@ object CommonSettings {
   ) ++ settings
 
   lazy val prodSettings: Seq[Setting[_]] = settings
-
-  lazy val appSettings: Seq[Setting[_]] = prodSettings ++ Vector(
-    //gives us the 'universal' directory in build artifacts
-    Compile / unmanagedResourceDirectories += baseDirectory.value / "src" / "universal"
-  )
-
-  lazy val dockerSettings: Seq[Setting[_]] = {
-    Vector(
-      //https://sbt-native-packager.readthedocs.io/en/latest/formats/docker.html
-      dockerBaseImage := "openjdk:15.0.2-jdk-buster",
-      dockerRepository := Some("translnd"),
-      //set the user to be 'translnd' rather than
-      //the default provided by sbt native packager
-      //which is 'demiourgos728'
-      Docker / daemonUser := "translnd",
-      Docker / packageName := packageName.value,
-      Docker / version := version.value,
-      dockerUpdateLatest := isSnapshot.value
-    )
-  }
 
   lazy val binariesPath: Path =
     Paths.get(Properties.userHome, ".bitcoin-s", "binaries")

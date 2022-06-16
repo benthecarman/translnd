@@ -1,4 +1,3 @@
-import com.typesafe.sbt.packager.windows._
 import java.nio.file.Files
 import java.security.MessageDigest
 import scala.collection.JavaConverters._
@@ -6,43 +5,14 @@ import scala.concurrent._
 import scala.concurrent.duration.DurationInt
 import scala.util.Properties
 
-name := "translnd"
-
-sonatypeProfileName := "com.translnd"
-
-scalaVersion := "2.13.8"
-
-inThisBuild(CommonSettings.settings)
-
 enablePlugins(ReproducibleBuildsPlugin,
               JavaAppPackaging,
               GraalVMNativeImagePlugin,
               DockerPlugin,
               WindowsPlugin)
 
-Compile / doc := (target.value / "none")
-scalacOptions ++= Seq("release", "11")
-
-// general package information (can be scoped to Windows)
-maintainer := "benthecarman <benthecarman@live.com>"
-// Will say "Welcome to the <packageSummary> Setup Wizard"
-packageSummary := "translnd"
-// Will be used for drop down menu in setup wizard
-packageDescription := "translnd"
-
-// wix build information
-wixProductId := java.util.UUID.randomUUID().toString
-wixProductUpgradeId := java.util.UUID.randomUUID().toString
-
-// Adding the wanted wixFeature:
-wixFeatures += WindowsFeature(
-  id = "shortcuts",
-  title = "Shortcuts in start menu",
-  desc = "Add shortcuts for execution and uninstall in start menu",
-  components = Seq(
-    AddShortCuts(Seq("bin/translnd.bat"))
-  )
-)
+sonatypeCredentialHost := "s01.oss.sonatype.org"
+sonatypeRepository := "https://s01.oss.sonatype.org/service/local"
 
 lazy val root = project
   .in(file("."))
