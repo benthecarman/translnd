@@ -50,37 +50,41 @@ object Sphinx extends Logging {
   def blind(pub: ECPublicKey, blindingFactor: ByteVector): ECPublicKey =
     CryptoUtil.tweakMultiply(pub, FieldElement.fromBytes(blindingFactor))
 
-  def blind(pub: ECPublicKey, blindingFactors: Seq[ByteVector]): ECPublicKey =
+  def blind(
+      pub: ECPublicKey,
+      blindingFactors: Vector[ByteVector]): ECPublicKey =
     blindingFactors.foldLeft(pub)(blind)
 
   /** Compute the ephemeral public keys and shared secrets for all nodes on the route.
     *
     * @param sessionKey this node's session key.
-    * @param ECPublicKeys public keys of each node on the route.
+    * @param pubKeys public keys of each node on the route.
     * @return a tuple (ephemeral public keys, shared secrets).
     */
   def computeEphemeralECPublicKeysAndSharedSecrets(
       sessionKey: ECPrivateKey,
-      pubKeys: Seq[ECPublicKey]): (Seq[ECPublicKey], Seq[ECPrivateKey]) = {
+      pubKeys: Vector[ECPublicKey]): (
+      Vector[ECPublicKey],
+      Vector[ECPrivateKey]) = {
     val ephemeralECPublicKey0 = blind(CryptoParams.getG, sessionKey.bytes)
     val secret0 = computeSharedSecret(pubKeys.head, sessionKey)
     val blindingFactor0 = computeBlindingFactor(ephemeralECPublicKey0, secret0)
     computeEphemeralECPublicKeysAndSharedSecrets(sessionKey,
                                                  pubKeys.tail,
-                                                 Seq(ephemeralECPublicKey0),
-                                                 Seq(blindingFactor0),
-                                                 Seq(secret0))
+                                                 Vector(ephemeralECPublicKey0),
+                                                 Vector(blindingFactor0),
+                                                 Vector(secret0))
   }
 
   @tailrec
   private def computeEphemeralECPublicKeysAndSharedSecrets(
       sessionKey: ECPrivateKey,
-      pubKeys: Seq[ECPublicKey],
-      ephemeralECPublicKeys: Seq[ECPublicKey],
-      blindingFactors: Seq[ByteVector],
-      sharedSecrets: Seq[ECPrivateKey]): (
-      Seq[ECPublicKey],
-      Seq[ECPrivateKey]) = {
+      pubKeys: Vector[ECPublicKey],
+      ephemeralECPublicKeys: Vector[ECPublicKey],
+      blindingFactors: Vector[ByteVector],
+      sharedSecrets: Vector[ECPrivateKey]): (
+      Vector[ECPublicKey],
+      Vector[ECPrivateKey]) = {
     if (pubKeys.isEmpty)
       (ephemeralECPublicKeys, sharedSecrets)
     else {
@@ -159,7 +163,7 @@ object Sphinx extends Logging {
     */
   case class PacketAndSecrets(
       packet: OnionRoutingPacket,
-      sharedSecrets: Seq[(ECPrivateKey, ECPublicKey)])
+      sharedSecrets: Vector[(ECPrivateKey, ECPublicKey)])
 
   /** Generate a deterministic filler to prevent intermediate nodes from knowing their position in the route.
     * See https://github.com/lightningnetwork/lightning-rfc/blob/master/04-onion-routing.md#filler-generation
@@ -173,8 +177,8 @@ object Sphinx extends Logging {
   def generateFiller(
       keyType: String,
       packetPayloadLength: Int,
-      sharedSecrets: Seq[ECPrivateKey],
-      payloads: Seq[ByteVector]): ByteVector = {
+      sharedSecrets: Vector[ECPrivateKey],
+      payloads: Vector[ByteVector]): ByteVector = {
     require(sharedSecrets.length == payloads.length,
             "the number of secrets should equal the number of payloads")
 
@@ -314,26 +318,28 @@ object Sphinx extends Logging {
 
   def computeEphemeralPublicKeysAndSharedSecrets(
       sessionKey: ECPrivateKey,
-      publicKeys: Seq[ECPublicKey]): (Seq[ECPublicKey], Seq[ECPrivateKey]) = {
+      publicKeys: Vector[ECPublicKey]): (
+      Vector[ECPublicKey],
+      Vector[ECPrivateKey]) = {
     val ephemeralPublicKey0 = blind(CryptoParams.getG, sessionKey.bytes)
     val secret0 = computeSharedSecret(publicKeys.head, sessionKey)
     val blindingFactor0 = computeBlindingFactor(ephemeralPublicKey0, secret0)
     computeEphemeralPublicKeysAndSharedSecrets(sessionKey,
                                                publicKeys.tail,
-                                               Seq(ephemeralPublicKey0),
-                                               Seq(blindingFactor0),
-                                               Seq(secret0))
+                                               Vector(ephemeralPublicKey0),
+                                               Vector(blindingFactor0),
+                                               Vector(secret0))
   }
 
   @tailrec
   private def computeEphemeralPublicKeysAndSharedSecrets(
       sessionKey: ECPrivateKey,
-      publicKeys: Seq[ECPublicKey],
-      ephemeralPublicKeys: Seq[ECPublicKey],
-      blindingFactors: Seq[ByteVector],
-      sharedSecrets: Seq[ECPrivateKey]): (
-      Seq[ECPublicKey],
-      Seq[ECPrivateKey]) = {
+      publicKeys: Vector[ECPublicKey],
+      ephemeralPublicKeys: Vector[ECPublicKey],
+      blindingFactors: Vector[ByteVector],
+      sharedSecrets: Vector[ECPrivateKey]): (
+      Vector[ECPublicKey],
+      Vector[ECPrivateKey]) = {
     if (publicKeys.isEmpty)
       (ephemeralPublicKeys, sharedSecrets)
     else {
@@ -355,7 +361,7 @@ object Sphinx extends Logging {
     *
     * @param sessionKey          session key.
     * @param packetPayloadLength length of the packet's encrypted onion payload (e.g. 1300 for standard payment onions).
-    * @param ECPublicKeys          node public keys (one per node).
+    * @param pubKeys             node public keys (one per node).
     * @param payloads            payloads (one per node).
     * @param associatedData      associated data.
     * @return An onion packet with all shared secrets. The onion packet can be sent to the first node in the list, and
@@ -364,8 +370,8 @@ object Sphinx extends Logging {
   def create(
       sessionKey: ECPrivateKey,
       packetPayloadLength: Int,
-      pubKeys: Seq[ECPublicKey],
-      payloads: Seq[ByteVector],
+      pubKeys: Vector[ECPublicKey],
+      payloads: Vector[ByteVector],
       associatedData: Option[ByteVector]): PacketAndSecrets = {
     require(payloads.map(_.length + MacLength).sum <= packetPayloadLength,
             s"packet per-hop payloads cannot exceed $packetPayloadLength bytes")
@@ -388,9 +394,9 @@ object Sphinx extends Logging {
 
     @tailrec
     def loop(
-        hopPayloads: Seq[ByteVector],
-        ephKeys: Seq[ECPublicKey],
-        sharedSecrets: Seq[ECPrivateKey],
+        hopPayloads: Vector[ByteVector],
+        ephKeys: Vector[ECPublicKey],
+        sharedSecrets: Vector[ECPrivateKey],
         packet: OnionRoutingPacket): OnionRoutingPacket = {
       if (hopPayloads.isEmpty) packet
       else {
