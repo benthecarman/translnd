@@ -7,6 +7,7 @@ import lnrpc.SendRequest
 import org.bitcoins.core.currency.Satoshis
 import org.bitcoins.core.number.UInt32
 import org.bitcoins.core.protocol.ln.currency.MilliSatoshis
+import org.bitcoins.crypto.CryptoUtil
 import org.bitcoins.lnd.rpc.LndUtils
 import org.bitcoins.testkit.async.TestAsyncUtil
 import routerrpc.SendPaymentRequest
@@ -14,6 +15,36 @@ import routerrpc.SendPaymentRequest
 import scala.concurrent.duration.DurationInt
 
 class DualLndTest extends DualLndFixture with LndUtils {
+
+  it must "create an invoices" in { param =>
+    val (_, _, htlc) = param
+
+    val amount = Satoshis(1000)
+    val memo = "hello world"
+    val expiry = 3600
+
+    for {
+      inv <- htlc.createInvoice(memo, amount, expiry)
+      dbOpt <- htlc.lookupInvoice(inv.lnTags.paymentHash.hash)
+    } yield {
+      assert(inv.lnTags.description.exists(_.string == memo))
+      assert(inv.amount.exists(_.toSatoshis == amount))
+      assert(inv.lnTags.expiryTime.isDefined)
+
+      dbOpt match {
+        case Some(db) =>
+          assert(db.invoice == inv)
+          assert(db.state == Unpaid)
+          assert(db.hash == CryptoUtil.sha256(db.preimage))
+          assert(db.index >= 0)
+          assert(db.amountOpt.contains(MilliSatoshis.fromSatoshis(amount)))
+          assert(db.amountPaidOpt.isEmpty)
+
+          assert(inv.lnTags.secret.exists(_.secret == db.paymentSecret))
+        case None => fail("Could not find in database")
+      }
+    }
+  }
 
   it must "rotate keys" in { param =>
     val (_, _, htlc) = param
@@ -83,6 +114,9 @@ class DualLndTest extends DualLndFixture with LndUtils {
       assert(preBal.localBalance + amount == postBal.localBalance)
       invOpt match {
         case Some(invoiceDb) =>
+          assert(
+            invoiceDb.amountPaidOpt.contains(
+              MilliSatoshis.fromSatoshis(amount)))
           assert(invoiceDb.hash == invoice.lnTags.paymentHash.hash)
           assert(invoiceDb.state == Paid)
         case None => fail("Invoice does not exist")
@@ -127,6 +161,8 @@ class DualLndTest extends DualLndFixture with LndUtils {
       invOpt match {
         case Some(invoice) =>
           assert(db == invoice)
+          assert(
+            invoice.amountPaidOpt.contains(MilliSatoshis.fromSatoshis(amount)))
           assert(invoice.hash == inv.lnTags.paymentHash.hash)
           assert(invoice.state == Paid)
         case None => fail("Invoice does not exist")
@@ -156,6 +192,8 @@ class DualLndTest extends DualLndFixture with LndUtils {
       assert(preBal.localBalance + amount == postBal.localBalance)
       invOpt match {
         case Some(invoice) =>
+          assert(
+            invoice.amountPaidOpt.contains(MilliSatoshis.fromSatoshis(amount)))
           assert(invoice.hash == inv.lnTags.paymentHash.hash)
           assert(invoice.state == Paid)
         case None => fail("Invoice does not exist")
@@ -194,6 +232,8 @@ class DualLndTest extends DualLndFixture with LndUtils {
       invOpt match {
         case Some(invoice) =>
           assert(db == invoice)
+          assert(
+            invoice.amountPaidOpt.contains(MilliSatoshis.fromSatoshis(amount)))
           assert(invoice.hash == inv.lnTags.paymentHash.hash)
           assert(invoice.state == Paid)
         case None => fail("Invoice does not exist")
@@ -221,6 +261,7 @@ class DualLndTest extends DualLndFixture with LndUtils {
     } yield {
       assert(db.state == Expired)
       assert(db.invoice == inv)
+      assert(db.amountPaidOpt.isEmpty)
     }
   }
 }

@@ -73,6 +73,8 @@ case class InvoiceDAO()(implicit
 
     def amount: Rep[Option[MilliSatoshis]] = column("amount")
 
+    def amountPaid: Rep[Option[MilliSatoshis]] = column("amount_paid")
+
     def expireTime: Rep[Option[Long]] = column("expire_time")
 
     def invoice: Rep[LnInvoice] = column("invoice", O.Unique)
@@ -82,7 +84,15 @@ case class InvoiceDAO()(implicit
     def state: Rep[InvoiceState] = column("state")
 
     def * : ProvenShape[InvoiceDb] =
-      (hash, preimage, paymentSecret, amount, expireTime, invoice, idx, state)
+      (hash,
+       preimage,
+       paymentSecret,
+       amount,
+       amountPaid,
+       expireTime,
+       invoice,
+       idx,
+       state)
         .<>(InvoiceDb.tupled, InvoiceDb.unapply)
   }
 }
