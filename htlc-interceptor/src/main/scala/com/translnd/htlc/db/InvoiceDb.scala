@@ -1,6 +1,7 @@
 package com.translnd.htlc.db
 
-import com.translnd.htlc.FinalHopTLVStream
+import com.translnd.htlc.{FinalHopTLVStream, InvoiceState}
+import com.translnd.htlc.InvoiceState._
 import org.bitcoins.core.protocol.ln._
 import org.bitcoins.core.protocol.ln.channel.ShortChannelId
 import org.bitcoins.core.protocol.ln.currency._
@@ -19,9 +20,7 @@ case class InvoiceDb(
     expireTimeOpt: Option[Long],
     invoice: LnInvoice,
     index: Int,
-    expired: Boolean,
-    settled: Boolean) {
-  require(!(settled && expired), "invoice cannot be both settled and expired")
+    state: InvoiceState) {
 
   lazy val msats: MilliSatoshis = amountOpt.getOrElse(MilliSatoshis.zero)
 
@@ -33,26 +32,30 @@ case class InvoiceDb(
     if (Sha256Digest(req.paymentHash) != hash)
       throw new IllegalArgumentException("Payment Hash does not match")
 
-    if (settled) {
-      Some(SETTLE) // skip already settled invoices
-    } else {
-      val now = TimeUtil.currentEpochSecond
-      val wholeAmount = msats.toUInt64 <= req.outgoingAmountMsat &&
-        finalHop.amtToForward.amt >= msats
+    state match {
+      case Paid =>
+        Some(SETTLE) // skip already settled invoices
+      case Expired | Cancelled => Some(FAIL)
+      case Accepted            => None
+      case Unpaid =>
+        val now = TimeUtil.currentEpochSecond
+        val wholeAmount = msats.toUInt64 <= req.outgoingAmountMsat &&
+          finalHop.amtToForward.amt >= msats
 
-      val correctAmt = finalHop.paymentDataOpt.exists(_.msats >= msats)
+        val correctAmt = finalHop.paymentDataOpt.exists(_.msats >= msats)
 
-      val correctChanId = scids.map(_.u64).contains(req.outgoingRequestedChanId)
+        val correctChanId =
+          scids.map(_.u64).contains(req.outgoingRequestedChanId)
 
-      val correctSecret =
-        finalHop.paymentDataOpt.exists(_.paymentSecret == paymentSecret)
+        val correctSecret =
+          finalHop.paymentDataOpt.exists(_.paymentSecret == paymentSecret)
 
-      val notExpired = expireTimeOpt.forall(_ >= now)
+        val notExpired = expireTimeOpt.forall(_ >= now)
 
-      if (correctAmt && correctSecret && correctChanId && notExpired) {
-        if (wholeAmount) Some(SETTLE)
-        else None
-      } else Some(FAIL)
+        if (correctAmt && correctSecret && correctChanId && notExpired) {
+          if (wholeAmount) Some(SETTLE)
+          else None
+        } else Some(FAIL)
     }
   }
 }
@@ -81,8 +84,7 @@ object InvoiceDbs {
       amountOpt = amountOpt,
       expireTimeOpt = expireTimeOpt,
       invoice = invoice,
-      expired = false,
-      settled = false
+      state = Unpaid
     )
   }
 }
