@@ -16,7 +16,7 @@ import scala.concurrent.duration.DurationInt
 
 class DualLndTest extends DualLndFixture with LndUtils {
 
-  it must "create an invoices" in { param =>
+  it must "create an invoice" in { param =>
     val (_, _, htlc) = param
 
     val amount = Satoshis(1000)
