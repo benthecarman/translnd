@@ -6,6 +6,7 @@ import akka.stream._
 import akka.stream.scaladsl._
 import com.google.common.util.concurrent.AtomicLongMap
 import com.translnd.channel.ids.ExistingChannelId
+import com.translnd.htlc.InvoiceState._
 import com.translnd.htlc.config._
 import com.translnd.htlc.crypto.Sphinx
 import com.translnd.htlc.db._
@@ -152,14 +153,38 @@ class HTLCInterceptor private (val lnds: Vector[LndRpcClient])(implicit
       val action = for {
         invoiceDb <- invoiceDAO.createAction(invoiceDb)
         _ <- channelIdDAO.createAllAction(channelIdDbs)
-      } yield invoiceDb.invoice
+      } yield invoiceDb
 
-      invoiceDAO.safeDatabase.run(action)
+      for {
+        invoiceDb <- invoiceDAO.safeDatabase.run(action)
+        _ <- invoiceQueue.offer(invoiceDb)
+      } yield invoiceDb.invoice
     }
   }
 
   def lookupInvoice(hash: Sha256Digest): Future[Option[InvoiceDb]] = {
     invoiceDAO.read(hash)
+  }
+
+  def cancelInvoice(hash: Sha256Digest): Future[Option[InvoiceDb]] = {
+    val action = invoiceDAO.findByPrimaryKeyAction(hash).flatMap {
+      case None => DBIO.successful(None)
+      case Some(db) =>
+        val updated = db.state match {
+          case Paid =>
+            throw new RuntimeException(
+              s"Cannot cancel an invoice that has been paid")
+          case Cancelled | Expired => db
+          case Unpaid | Accepted   => db.copy(state = Cancelled)
+        }
+
+        invoiceDAO.updateAction(updated).map(Some(_))
+    }
+
+    for {
+      res <- invoiceDAO.safeDatabase.run(action)
+      _ <- res.map(invoiceQueue.offer).getOrElse(Future.unit)
+    } yield res
   }
 
   private[this] val (invoiceQueue, invoiceSource) =
@@ -237,7 +262,7 @@ class HTLCInterceptor private (val lnds: Vector[LndRpcClient])(implicit
                         ForwardHtlcInterceptResponse(incomingCircuitKey = ck,
                                                      action = SETTLE,
                                                      preimage = db.preimage)
-                      val updatedDb = db.copy(settled = true)
+                      val updatedDb = db.copy(state = Paid)
                       handleOnInvoicePaid(updatedDb, resp)
                       Future.successful((resp, updatedDb))
                     case Some(FAIL) =>
@@ -275,7 +300,7 @@ class HTLCInterceptor private (val lnds: Vector[LndRpcClient])(implicit
                             ForwardHtlcInterceptResponse(ck,
                                                          action = SETTLE,
                                                          preimage = db.preimage)
-                          val updatedDb = db.copy(settled = true)
+                          val updatedDb = db.copy(state = Paid)
 
                           // Schedule for later because we need to
                           // wait for other parts to finish

@@ -7,8 +7,7 @@ CREATE TABLE invoices
     expire_time    INTEGER,
     invoice        VARCHAR(254) UNIQUE      NOT NULL,
     idx            INTEGER UNIQUE           NOT NULL,
-    expired        INTEGER                  NOT NULL,
-    settled        INTEGER                  NOT NULL
+    state          VARCHAR(254)             NOT NULL
 );
 
 CREATE TABLE channel_ids

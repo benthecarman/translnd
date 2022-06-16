@@ -1,5 +1,7 @@
 package com.translnd.htlc.db
 
+import com.translnd.htlc.InvoiceState
+import com.translnd.htlc.InvoiceState._
 import com.translnd.htlc.config.TransLndAppConfig
 import org.bitcoins.core.protocol.ln._
 import org.bitcoins.core.protocol.ln.currency.MilliSatoshis
@@ -22,6 +24,10 @@ case class InvoiceDAO()(implicit
   private val mappers = new DbCommonsColumnMappers(profile)
   import mappers._
 
+  implicit val InvoiceStateMapper: BaseColumnType[InvoiceState] =
+    MappedColumnType.base[InvoiceState, String](_.toString,
+                                                InvoiceState.fromString)
+
   override val table: TableQuery[InvoiceTable] = TableQuery[InvoiceTable]
 
   override def createAll(ts: Vector[InvoiceDb]): Future[Vector[InvoiceDb]] =
@@ -39,13 +45,12 @@ case class InvoiceDAO()(implicit
     val now = TimeUtil.currentEpochSecond
     val findAction = table
       .filter(_.expireTime < now)
-      .filterNot(_.expired)
-      .filterNot(_.settled)
+      .filter(_.state === Unpaid.asInstanceOf[InvoiceState])
       .result
       .map(_.toVector)
 
     val action = findAction.flatMap { dbs =>
-      val updated = dbs.map(_.copy(expired = true))
+      val updated = dbs.map(_.copy(state = Expired))
       updateAllAction(updated)
     }
     safeDatabase.runVec(action)
@@ -74,20 +79,10 @@ case class InvoiceDAO()(implicit
 
     def idx: Rep[Int] = column("idx", O.Unique)
 
-    def expired: Rep[Boolean] = column("expired")
-
-    def settled: Rep[Boolean] = column("settled")
+    def state: Rep[InvoiceState] = column("state")
 
     def * : ProvenShape[InvoiceDb] =
-      (hash,
-       preimage,
-       paymentSecret,
-       amount,
-       expireTime,
-       invoice,
-       idx,
-       expired,
-       settled)
+      (hash, preimage, paymentSecret, amount, expireTime, invoice, idx, state)
         .<>(InvoiceDb.tupled, InvoiceDb.unapply)
   }
 }

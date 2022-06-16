@@ -1,6 +1,7 @@
 package com.translnd.htlc
 
 import akka.stream.scaladsl.Sink
+import com.translnd.htlc.InvoiceState._
 import com.translnd.testkit._
 import lnrpc.SendRequest
 import org.bitcoins.core.currency.Satoshis
@@ -23,6 +24,34 @@ class DualLndTest extends DualLndFixture with LndUtils {
       inv <- htlc.createInvoice("hello world", amount, 3600)
       inv2 <- htlc.createInvoice("hello world", amount, 3600)
     } yield assert(inv.nodeId != inv2.nodeId)
+  }
+
+  it must "cancel an invoice" in { param =>
+    val (_, _, htlc) = param
+
+    val amount = Satoshis(1000)
+
+    val subF = htlc
+      .subscribeInvoices()
+      .filter(_.state == Cancelled)
+      .runWith(Sink.head)
+
+    for {
+      inv <- htlc.createInvoice("hello world", amount, 3600)
+      hash = inv.lnTags.paymentHash.hash
+      cancelOpt <- htlc.cancelInvoice(hash)
+      dbOpt <- htlc.lookupInvoice(hash)
+      sub <- subF
+    } yield {
+      assert(cancelOpt.exists(_.hash == hash))
+      assert(cancelOpt.exists(_.state == Cancelled))
+
+      assert(dbOpt.exists(_.hash == hash))
+      assert(dbOpt.exists(_.state == Cancelled))
+
+      assert(sub.invoice == inv)
+      assert(sub.state == Cancelled)
+    }
   }
 
   it must "receive a mpp payment" in { param =>
@@ -55,7 +84,7 @@ class DualLndTest extends DualLndFixture with LndUtils {
       invOpt match {
         case Some(invoiceDb) =>
           assert(invoiceDb.hash == invoice.lnTags.paymentHash.hash)
-          assert(invoiceDb.settled)
+          assert(invoiceDb.state == Paid)
         case None => fail("Invoice does not exist")
       }
     }
@@ -70,7 +99,7 @@ class DualLndTest extends DualLndFixture with LndUtils {
 
     val dbF = htlc
       .subscribeInvoices()
-      .filter(_.settled)
+      .filter(_.state == Paid)
       .runWith(Sink.head)
 
     for {
@@ -91,7 +120,7 @@ class DualLndTest extends DualLndFixture with LndUtils {
       postBal <- lnd.channelBalance()
       db <- dbF
     } yield {
-      assert(db.settled)
+      assert(db.state == Paid)
       assert(db.hash == inv.lnTags.paymentHash.hash)
       assert(pay.failureReason.isFailureReasonNone)
       assert(preBal.localBalance + amount == postBal.localBalance)
@@ -99,7 +128,7 @@ class DualLndTest extends DualLndFixture with LndUtils {
         case Some(invoice) =>
           assert(db == invoice)
           assert(invoice.hash == inv.lnTags.paymentHash.hash)
-          assert(invoice.settled)
+          assert(invoice.state == Paid)
         case None => fail("Invoice does not exist")
       }
     }
@@ -128,7 +157,7 @@ class DualLndTest extends DualLndFixture with LndUtils {
       invOpt match {
         case Some(invoice) =>
           assert(invoice.hash == inv.lnTags.paymentHash.hash)
-          assert(invoice.settled)
+          assert(invoice.state == Paid)
         case None => fail("Invoice does not exist")
       }
     }
@@ -143,7 +172,7 @@ class DualLndTest extends DualLndFixture with LndUtils {
 
     val dbF = htlc
       .subscribeInvoices()
-      .filter(_.settled)
+      .filter(_.state == Paid)
       .runWith(Sink.head)
 
     for {
@@ -158,7 +187,7 @@ class DualLndTest extends DualLndFixture with LndUtils {
       postBal <- lnd.channelBalance()
       db <- dbF
     } yield {
-      assert(db.settled)
+      assert(db.state == Paid)
       assert(db.hash == inv.lnTags.paymentHash.hash)
       assert(pay.paymentError.isEmpty)
       assert(preBal.localBalance + amount == postBal.localBalance)
@@ -166,7 +195,7 @@ class DualLndTest extends DualLndFixture with LndUtils {
         case Some(invoice) =>
           assert(db == invoice)
           assert(invoice.hash == inv.lnTags.paymentHash.hash)
-          assert(invoice.settled)
+          assert(invoice.state == Paid)
         case None => fail("Invoice does not exist")
       }
     }
@@ -179,7 +208,7 @@ class DualLndTest extends DualLndFixture with LndUtils {
 
     val dbF = htlc
       .subscribeInvoices()
-      .filter(_.expired)
+      .filter(_.state == Expired)
       .runWith(Sink.head)
 
     for {
@@ -190,7 +219,7 @@ class DualLndTest extends DualLndFixture with LndUtils {
         lndA.lnd.sendPaymentSync(SendRequest(paymentRequest = inv.toString)))
       db <- dbF
     } yield {
-      assert(db.expired)
+      assert(db.state == Expired)
       assert(db.invoice == inv)
     }
   }

@@ -7,8 +7,7 @@ CREATE TABLE invoices
     expire_time    INTEGER,
     invoice        TEXT UNIQUE      NOT NULL,
     idx            INTEGER UNIQUE   NOT NULL,
-    expired        BOOLEAN          NOT NULL,
-    settled        BOOLEAN          NOT NULL
+    state          TEXT             NOT NULL
 );
 
 CREATE TABLE channel_ids

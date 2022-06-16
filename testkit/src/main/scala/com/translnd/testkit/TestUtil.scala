@@ -69,7 +69,6 @@ trait TestUtil extends Logging with LndUtils {
       _ <- openChannel(bitcoind, clientA, clientB, CHANNEL_SIZE, Satoshis.zero)
       _ <- openChannel(bitcoind, clientA, clientB, CHANNEL_SIZE, Satoshis.zero)
       _ <- TestAsyncUtil.awaitConditionF(() => isSynced)
-      _ <- TestAsyncUtil.nonBlockingSleep(10.seconds)
     } yield (clientA, clientB)
   }
 
