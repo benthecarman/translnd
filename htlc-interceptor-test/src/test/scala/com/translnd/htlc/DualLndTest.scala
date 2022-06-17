@@ -110,7 +110,8 @@ class DualLndTest extends DualLndFixture with LndUtils {
       invOpt <- htlc.lookupInvoice(invoice.lnTags.paymentHash.hash)
       postBal <- lnd.channelBalance()
     } yield {
-      assert(pay.failureReason.isFailureReasonNone)
+      assert(pay.failureReason.isFailureReasonNone,
+             s"Payment failure: ${pay.failureReason}")
       assert(preBal.localBalance + amount == postBal.localBalance)
       invOpt match {
         case Some(invoiceDb) =>
