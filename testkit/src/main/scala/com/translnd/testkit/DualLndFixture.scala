@@ -2,12 +2,14 @@ package com.translnd.testkit
 
 import com.translnd.htlc.HTLCInterceptor
 import com.translnd.htlc.config.TransLndAppConfig
+import org.bitcoins.core.currency.Satoshis
 import org.bitcoins.lnd.rpc.LndRpcClient
 import org.bitcoins.lnd.rpc.config.LndInstanceLocal
 import org.bitcoins.rpc.client.common.BitcoindRpcClient
 import org.bitcoins.testkit.BitcoinSTestAppConfig.configWithEmbeddedDb
 import org.bitcoins.testkit.EmbeddedPg
 import org.bitcoins.testkit.fixtures.BitcoinSFixture
+import org.bitcoins.testkit.lnd.LndRpcTestUtil
 import org.bitcoins.testkit.rpc.CachedBitcoindV21
 import org.scalatest.FutureOutcome
 
@@ -28,7 +30,14 @@ trait DualLndFixture
         for {
           bitcoind <- cachedBitcoindWithFundsF
           _ = logger.debug("creating lnds")
-          lnds <- TestUtil.createMPPLnds(bitcoind)
+          lnds <- LndRpcTestUtil.createNodePair(bitcoind,
+                                                CHANNEL_SIZE,
+                                                Satoshis.zero)
+          _ <- LndRpcTestUtil.openChannel(bitcoind = bitcoind,
+                                          n1 = lnds._1,
+                                          n2 = lnds._2,
+                                          amt = CHANNEL_SIZE,
+                                          pushAmt = Satoshis.zero)
           htlc <- {
             val parent =
               lnds._2.instance.asInstanceOf[LndInstanceLocal].datadir.getParent
