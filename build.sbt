@@ -19,15 +19,15 @@ lazy val translnd = project
   .aggregate(
     channelIds,
     channelIdsTest,
-    htlcInterceptor,
-    htlcInterceptorTest,
+    pubkeyRotator,
+    pubkeyRotatorTest,
     testkit
   )
   .dependsOn(
     channelIds,
     channelIdsTest,
-    htlcInterceptor,
-    htlcInterceptorTest,
+    pubkeyRotator,
+    pubkeyRotatorTest,
     testkit
   )
   .settings(CommonSettings.settings: _*)
@@ -47,24 +47,24 @@ lazy val channelIdsTest = project
   .settings(name := "channel-ids-test", libraryDependencies ++= Deps.testkit)
   .dependsOn(channelIds)
 
-lazy val htlcInterceptor = project
-  .in(file("htlc-interceptor"))
+lazy val pubkeyRotator = project
+  .in(file("pubkey-rotator"))
   .settings(CommonSettings.settings: _*)
-  .settings(name := "htlc-interceptor",
-            libraryDependencies ++= Deps.htlcInterceptor)
+  .settings(name := "pubkey-rotator",
+            libraryDependencies ++= Deps.pubkeyRotator)
   .dependsOn(channelIds)
 
-lazy val htlcInterceptorTest = project
-  .in(file("htlc-interceptor-test"))
+lazy val pubkeyRotatorTest = project
+  .in(file("pubkey-rotator-test"))
   .settings(CommonSettings.testSettings: _*)
-  .settings(name := "htlc-interceptor-test")
-  .dependsOn(htlcInterceptor, testkit)
+  .settings(name := "pubkey-rotator-test")
+  .dependsOn(pubkeyRotator, testkit)
 
 lazy val testkit = project
   .in(file("testkit"))
   .settings(CommonSettings.testSettings: _*)
   .settings(name := "testkit", libraryDependencies ++= Deps.testkit)
-  .dependsOn(htlcInterceptor)
+  .dependsOn(pubkeyRotator)
 
 TaskKeys.downloadLnd := {
   val logger = streams.value.log

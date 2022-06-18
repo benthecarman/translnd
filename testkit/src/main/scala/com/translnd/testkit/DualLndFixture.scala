@@ -1,7 +1,7 @@
 package com.translnd.testkit
 
-import com.translnd.htlc.HTLCInterceptor
-import com.translnd.htlc.config.TransLndAppConfig
+import com.translnd.rotator.PubkeyRotator
+import com.translnd.rotator.config._
 import org.bitcoins.core.currency.Satoshis
 import org.bitcoins.lnd.rpc.LndRpcClient
 import org.bitcoins.lnd.rpc.config.LndInstanceLocal
@@ -22,7 +22,7 @@ trait DualLndFixture
     with EmbeddedPg {
 
   override type FixtureParam =
-    (BitcoindRpcClient, LndRpcClient, HTLCInterceptor)
+    (BitcoindRpcClient, LndRpcClient, PubkeyRotator)
 
   override def withFixture(test: OneArgAsyncTest): FutureOutcome = {
     makeDependentFixture[FixtureParam](
@@ -46,7 +46,7 @@ trait DualLndFixture
             implicit val conf: TransLndAppConfig =
               TransLndAppConfig.fromDatadir(parent, Vector(pg))
 
-            conf.start().map(_ => HTLCInterceptor(Vector(lnds._2)))
+            conf.start().map(_ => PubkeyRotator(Vector(lnds._2)))
           }
         } yield (bitcoind, lnds._1, htlc)
       },
