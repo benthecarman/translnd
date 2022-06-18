@@ -39,6 +39,8 @@ class PubkeyRotator private (val lnds: Vector[LndRpcClient])(implicit
     with Logging {
   import system.dispatcher
 
+  require(lnds.nonEmpty, "Lnds cannot be empty")
+
   private[this] val keyManager = new TransKeyManager()
 
   private[rotator] val invoiceDAO = InvoiceDAO()
