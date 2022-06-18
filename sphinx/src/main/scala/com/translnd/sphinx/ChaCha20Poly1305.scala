@@ -1,6 +1,5 @@
-package com.translnd.rotator.crypto
+package com.translnd.sphinx
 
-import grizzled.slf4j.Logging
 import org.bitcoins.core.number.UInt64
 import org.bouncycastle.crypto.engines.ChaCha7539Engine
 import org.bouncycastle.crypto.params.{KeyParameter, ParametersWithIV}
@@ -29,7 +28,7 @@ object Poly1305 {
   * see https://tools.ietf.org/html/rfc7539#section-2.5
   */
 object ChaCha20 {
-  import com.translnd.rotator.crypto.ChaCha20Poly1305._
+  import ChaCha20Poly1305._
 
   def encrypt(
       plaintext: ByteVector,
@@ -91,7 +90,7 @@ object ChaCha20 {
   *
   * This what we should be using (see BOLT #8)
   */
-object ChaCha20Poly1305 extends Logging {
+object ChaCha20Poly1305 {
 
   // @formatter:off
   abstract class ChaCha20Poly1305Error(msg: String) extends RuntimeException(msg)
@@ -123,8 +122,6 @@ object ChaCha20Poly1305 extends Logging {
       UInt64(aad.length).bytes.reverse,
       UInt64(ciphertext.length).bytes.reverse
     )
-    logger.debug(
-      s"encrypt($key, $nonce, $aad, $plaintext) = ($ciphertext, $tag)")
     (ciphertext, tag)
   }
 
@@ -152,9 +149,7 @@ object ChaCha20Poly1305 extends Logging {
       UInt64(ciphertext.length).bytes.reverse
     )
     if (tag != mac) throw InvalidMac()
-    val plaintext = ChaCha20.decrypt(ciphertext, key, nonce, 1)
-    logger.debug(s"decrypt($key, $nonce, $aad, $ciphertext, $mac) = $plaintext")
-    plaintext
+    ChaCha20.decrypt(ciphertext, key, nonce, 1)
   }
 
   def pad16(data: ByteVector): ByteVector =

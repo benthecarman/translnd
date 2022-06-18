@@ -17,6 +17,8 @@ ThisBuild / sonatypeRepository := "https://s01.oss.sonatype.org/service/local"
 lazy val translnd = project
   .in(file("."))
   .aggregate(
+    sphinx,
+    sphinxTest,
     channelIds,
     channelIdsTest,
     pubkeyRotator,
@@ -24,6 +26,8 @@ lazy val translnd = project
     testkit
   )
   .dependsOn(
+    sphinx,
+    sphinxTest,
     channelIds,
     channelIdsTest,
     pubkeyRotator,
@@ -35,6 +39,17 @@ lazy val translnd = project
     name := "translnd",
     publish / skip := true
   )
+
+lazy val sphinx = project
+  .in(file("sphinx"))
+  .settings(CommonSettings.settings: _*)
+  .settings(name := "channel-ids", libraryDependencies ++= Deps.sphinx)
+
+lazy val sphinxTest = project
+  .in(file("sphinx-test"))
+  .settings(CommonSettings.testSettings: _*)
+  .settings(name := "sphinx-test", libraryDependencies ++= Deps.testkit)
+  .dependsOn(sphinx)
 
 lazy val channelIds = project
   .in(file("channel-ids"))
@@ -52,7 +67,7 @@ lazy val pubkeyRotator = project
   .settings(CommonSettings.settings: _*)
   .settings(name := "pubkey-rotator",
             libraryDependencies ++= Deps.pubkeyRotator)
-  .dependsOn(channelIds)
+  .dependsOn(sphinx, channelIds)
 
 lazy val pubkeyRotatorTest = project
   .in(file("pubkey-rotator-test"))

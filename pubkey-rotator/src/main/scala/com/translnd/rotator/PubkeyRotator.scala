@@ -8,8 +8,8 @@ import com.google.common.util.concurrent.AtomicLongMap
 import com.translnd.channel.ids.ExistingChannelId
 import com.translnd.rotator.InvoiceState._
 import com.translnd.rotator.config._
-import com.translnd.rotator.crypto.Sphinx
 import com.translnd.rotator.db._
+import com.translnd.sphinx._
 import grizzled.slf4j.Logging
 import org.bitcoins.asyncutil.AsyncUtil
 import org.bitcoins.core.config._

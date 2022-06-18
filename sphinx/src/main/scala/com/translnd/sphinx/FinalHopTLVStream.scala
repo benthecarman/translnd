@@ -1,4 +1,4 @@
-package com.translnd.rotator
+package com.translnd.sphinx
 
 import org.bitcoins.core.protocol.tlv._
 

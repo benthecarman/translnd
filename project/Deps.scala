@@ -13,6 +13,9 @@ object Deps {
     val grizzledSlf4j =
       "org.clapper" %% "grizzled-slf4j" % V.grizzledSlf4jV withSources () withJavadoc ()
 
+    val bitcoinsCore =
+      "org.bitcoin-s" %% "bitcoin-s-core" % V.bitcoinsV withSources () withJavadoc ()
+
     val bitcoinsKeyManager =
       "org.bitcoin-s" %% "bitcoin-s-key-manager" % V.bitcoinsV withSources () withJavadoc ()
 
@@ -28,6 +31,8 @@ object Deps {
     val bitcoinsDbCommons =
       "org.bitcoin-s" %% "bitcoin-s-db-commons" % V.bitcoinsV withSources () withJavadoc ()
   }
+
+  val sphinx: List[ModuleID] = List(Compile.bitcoinsCore)
 
   val channelIds: List[ModuleID] =
     List(Compile.bitcoinsAppCommons, Compile.grizzledSlf4j)

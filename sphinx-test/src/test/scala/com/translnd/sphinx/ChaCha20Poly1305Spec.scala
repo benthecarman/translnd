@@ -14,13 +14,12 @@
  * limitations under the License.
  */
 
-package com.translnd.rotator.crypto
+package com.translnd.sphinx
 
-import com.translnd.rotator.crypto.ChaCha20Poly1305.InvalidMac
+import com.translnd.sphinx.ChaCha20Poly1305.InvalidMac
 import org.scalatest.funsuite.AnyFunSuite
 import scodec.bits._
 
-// FAILING!!
 class ChaCha20Poly1305Spec extends AnyFunSuite {
   test("Poly1305") {
     // from https://tools.ietf.org/html/rfc7539 ch 2.5.2
