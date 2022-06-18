@@ -1,16 +1,14 @@
-package com.translnd.rotator.crypto
+package com.translnd.sphinx
 
-import com.translnd.rotator.{FinalHopTLVStream, OnionRoutingPacket}
-import grizzled.slf4j.Logging
-import org.bitcoins.core.protocol._
+import org.bitcoins.core.protocol.BigSizeUInt
 import org.bitcoins.core.protocol.tlv.TLV
 import org.bitcoins.crypto._
-import scodec.bits._
+import scodec.bits.ByteVector
 
 import scala.annotation.tailrec
-import scala.util._
+import scala.util.{Failure, Success, Try}
 
-object Sphinx extends Logging {
+object Sphinx {
 
   /** Supported packet version. Note that since this value is outside of the onion encrypted payload, intermediate
     * nodes may or may not use this value when forwarding the packet to the next node.
@@ -376,11 +374,11 @@ object Sphinx extends Logging {
       associatedData: Option[ByteVector]): PacketAndSecrets = {
     require(payloads.map(_.length + MacLength).sum <= packetPayloadLength,
             s"packet per-hop payloads cannot exceed $packetPayloadLength bytes")
-    val (ephemeralECPublicKeys, sharedsecrets) =
+    val (ephemeralECPublicKeys, sharedSecrets) =
       computeEphemeralECPublicKeysAndSharedSecrets(sessionKey, pubKeys)
     val filler = generateFiller("rho",
                                 packetPayloadLength,
-                                sharedsecrets.dropRight(1),
+                                sharedSecrets.dropRight(1),
                                 payloads.dropRight(1))
 
     // We deterministically-derive the initial payload bytes: see https://github.com/lightningnetwork/lightning-rfc/pull/697
@@ -389,7 +387,7 @@ object Sphinx extends Logging {
     val lastPacket = wrap(payloads.last,
                           associatedData,
                           ephemeralECPublicKeys.last,
-                          sharedsecrets.last,
+                          sharedSecrets.last,
                           Left(startingBytes),
                           filler)
 
@@ -415,8 +413,8 @@ object Sphinx extends Logging {
 
     val packet = loop(payloads.dropRight(1),
                       ephemeralECPublicKeys.dropRight(1),
-                      sharedsecrets.dropRight(1),
+                      sharedSecrets.dropRight(1),
                       lastPacket)
-    PacketAndSecrets(packet, sharedsecrets.zip(pubKeys))
+    PacketAndSecrets(packet, sharedSecrets.zip(pubKeys))
   }
 }

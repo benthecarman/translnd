@@ -1,4 +1,4 @@
-package com.translnd.rotator
+package com.translnd.sphinx
 
 import org.bitcoins.crypto._
 import scodec.bits.ByteVector

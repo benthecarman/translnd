@@ -14,9 +14,8 @@
  * limitations under the License.
  */
 
-package com.translnd.rotator.crypto
+package com.translnd.sphinx
 
-import com.translnd.rotator.OnionRoutingPacket
 import org.bitcoins.crypto._
 import org.scalatest.funsuite.AnyFunSuite
 import scodec.bits._
@@ -27,8 +26,8 @@ import scala.util.Success
   */
 class SphinxSpec extends AnyFunSuite {
 
-  import Sphinx._
   import SphinxSpec._
+  import com.translnd.sphinx.Sphinx._
 
   test("generate ephemeral keys and secrets (reference test vector)") {
     val (ephkeys, sharedsecrets) =

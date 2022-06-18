@@ -1,7 +1,8 @@
 package com.translnd.rotator.db
 
-import com.translnd.rotator.{FinalHopTLVStream, InvoiceState}
+import com.translnd.rotator.InvoiceState
 import com.translnd.rotator.InvoiceState._
+import com.translnd.sphinx.FinalHopTLVStream
 import org.bitcoins.core.protocol.ln._
 import org.bitcoins.core.protocol.ln.channel.ShortChannelId
 import org.bitcoins.core.protocol.ln.currency._
