@@ -3,6 +3,7 @@ package com.translnd.rotator.db
 import com.translnd.rotator.InvoiceState
 import com.translnd.rotator.InvoiceState._
 import com.translnd.sphinx.FinalHopTLVStream
+import lnrpc.Failure.FailureCode
 import org.bitcoins.core.protocol.ln._
 import org.bitcoins.core.protocol.ln.channel.ShortChannelId
 import org.bitcoins.core.protocol.ln.currency._
@@ -30,15 +31,17 @@ case class InvoiceDb(
   def getAction(
       req: ForwardHtlcInterceptRequest,
       finalHop: FinalHopTLVStream,
-      scids: Vector[ShortChannelId]): Option[ResolveHoldForwardAction] = {
+      scids: Vector[ShortChannelId]): Option[
+    (ResolveHoldForwardAction, Option[FailureCode])] = {
     if (Sha256Digest(req.paymentHash) != hash)
       throw new IllegalArgumentException("Payment Hash does not match")
 
     state match {
       case Paid =>
-        Some(SETTLE) // skip already settled invoices
-      case Expired | Cancelled => Some(FAIL)
-      case Accepted            => None
+        Some((SETTLE, None)) // skip already settled invoices
+      case Expired | Cancelled =>
+        Some((FAIL, Some(FailureCode.FINAL_INCORRECT_HTLC_AMOUNT)))
+      case Accepted => None
       case Unpaid =>
         val now = TimeUtil.currentEpochSecond
         val wholeAmount = msats.toUInt64 <= req.outgoingAmountMsat &&
@@ -52,12 +55,19 @@ case class InvoiceDb(
         val correctSecret =
           finalHop.paymentDataOpt.exists(_.paymentSecret == paymentSecret)
 
-        val notExpired = expireTimeOpt.forall(_ >= now)
+        val expired = expireTimeOpt.exists(_ < now)
 
-        if (correctAmt && correctSecret && correctChanId && notExpired) {
-          if (wholeAmount) Some(SETTLE)
-          else None
-        } else Some(FAIL)
+        if (!correctAmt) {
+          Some((FAIL, Some(FailureCode.FINAL_INCORRECT_HTLC_AMOUNT)))
+        } else if (!correctSecret) {
+          Some((FAIL, Some(FailureCode.INCORRECT_OR_UNKNOWN_PAYMENT_DETAILS)))
+        } else if (!correctChanId) {
+          Some((FAIL, Some(FailureCode.INCORRECT_OR_UNKNOWN_PAYMENT_DETAILS)))
+        } else if (expired) {
+          Some((FAIL, Some(FailureCode.INCORRECT_OR_UNKNOWN_PAYMENT_DETAILS)))
+        } else if (wholeAmount) {
+          Some((SETTLE, None))
+        } else None
     }
   }
 }

@@ -11,6 +11,7 @@ import com.translnd.rotator.config._
 import com.translnd.rotator.db._
 import com.translnd.sphinx._
 import grizzled.slf4j.Logging
+import lnrpc.Failure.FailureCode
 import org.bitcoins.asyncutil.AsyncUtil
 import org.bitcoins.core.config._
 import org.bitcoins.core.currency._
@@ -250,8 +251,10 @@ class PubkeyRotator private (val lnds: Vector[LndRpcClient])(implicit
                 case Failure(err) =>
                   err.printStackTrace()
                   val resp =
-                    ForwardHtlcInterceptResponse(incomingCircuitKey = ck,
-                                                 action = FAIL)
+                    ForwardHtlcInterceptResponse(
+                      incomingCircuitKey = ck,
+                      action = FAIL,
+                      failureCode = FailureCode.INVALID_ONION_HMAC)
                   Future.successful((resp, db))
                 case Success(decrypted) =>
                   val actionOpt = db.getAction(request,
@@ -259,7 +262,7 @@ class PubkeyRotator private (val lnds: Vector[LndRpcClient])(implicit
                                                scids.map(_.scid))
 
                   actionOpt match {
-                    case Some(SETTLE) =>
+                    case Some((SETTLE, _)) =>
                       val resp =
                         ForwardHtlcInterceptResponse(incomingCircuitKey = ck,
                                                      action = SETTLE,
@@ -270,21 +273,25 @@ class PubkeyRotator private (val lnds: Vector[LndRpcClient])(implicit
                         db.copy(state = Paid, amountPaidOpt = Some(amtPaid))
                       handleOnInvoicePaid(updatedDb, resp)
                       Future.successful((resp, updatedDb))
-                    case Some(FAIL) =>
+                    case Some((FAIL, errOpt)) =>
                       val resp =
-                        ForwardHtlcInterceptResponse(incomingCircuitKey = ck,
-                                                     action = FAIL)
+                        ForwardHtlcInterceptResponse(
+                          incomingCircuitKey = ck,
+                          action = FAIL,
+                          failureCode = errOpt.getOrElse(FailureCode.RESERVED))
                       Future.successful((resp, db))
-                    case Some(RESUME) =>
+                    case Some((RESUME, _)) =>
                       val resp =
                         ForwardHtlcInterceptResponse(incomingCircuitKey = ck,
                                                      action = RESUME)
                       Future.successful((resp, db))
-                    case Some(action: Unrecognized) =>
+                    case Some((action: Unrecognized, errOpt)) =>
                       val resp =
-                        ForwardHtlcInterceptResponse(incomingCircuitKey = ck,
-                                                     action = action,
-                                                     preimage = db.preimage)
+                        ForwardHtlcInterceptResponse(
+                          incomingCircuitKey = ck,
+                          action = action,
+                          preimage = db.preimage,
+                          failureCode = errOpt.getOrElse(FailureCode.RESERVED))
                       Future.successful((resp, db))
                     case None =>
                       // Update paymentMap to have new payment
@@ -313,8 +320,12 @@ class PubkeyRotator private (val lnds: Vector[LndRpcClient])(implicit
                           // Schedule for later because we need to
                           // wait for other parts to finish
                           val runnable: Runnable = () => {
-                            paymentMap.remove(hash)
-                            handleOnInvoicePaid(updatedDb, resp)
+                            // This will only return non-zero on the first
+                            // call, so we can only call handleOnInvoicePaid once
+                            val ret = paymentMap.remove(hash)
+                            if (ret != 0) {
+                              handleOnInvoicePaid(updatedDb, resp)
+                            }
                             ()
                           }
                           system.scheduler.scheduleOnce(1.seconds, runnable)

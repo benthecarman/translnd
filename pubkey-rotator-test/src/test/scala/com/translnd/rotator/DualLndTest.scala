@@ -12,6 +12,7 @@ import org.bitcoins.lnd.rpc.LndUtils
 import org.bitcoins.testkit.async.TestAsyncUtil
 import routerrpc.SendPaymentRequest
 
+import scala.concurrent.Await
 import scala.concurrent.duration.DurationInt
 
 class DualLndTest extends DualLndFixture with LndUtils {
@@ -153,7 +154,7 @@ class DualLndTest extends DualLndFixture with LndUtils {
 
       invOpt <- htlc.lookupInvoice(inv.lnTags.paymentHash.hash)
       postBal <- lnd.channelBalance()
-      db <- dbF
+      db = Await.result(dbF, 10.seconds)
     } yield {
       assert(db.state == Paid)
       assert(db.hash == inv.lnTags.paymentHash.hash)
@@ -224,7 +225,7 @@ class DualLndTest extends DualLndFixture with LndUtils {
 
       invOpt <- htlc.lookupInvoice(inv.lnTags.paymentHash.hash)
       postBal <- lnd.channelBalance()
-      db <- dbF
+      db = Await.result(dbF, 10.seconds)
     } yield {
       assert(db.state == Paid)
       assert(db.hash == inv.lnTags.paymentHash.hash)
@@ -258,7 +259,7 @@ class DualLndTest extends DualLndFixture with LndUtils {
 
       _ <- recoverToSucceededIf[Exception](
         lndA.lnd.sendPaymentSync(SendRequest(paymentRequest = inv.toString)))
-      db <- dbF
+      db = Await.result(dbF, 10.seconds)
     } yield {
       assert(db.state == Expired)
       assert(db.invoice == inv)

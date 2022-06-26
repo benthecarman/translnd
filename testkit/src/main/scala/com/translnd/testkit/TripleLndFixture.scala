@@ -8,14 +8,14 @@ import org.bitcoins.rpc.client.common.BitcoindRpcClient
 import org.bitcoins.testkit.BitcoinSTestAppConfig.configWithEmbeddedDb
 import org.bitcoins.testkit.EmbeddedPg
 import org.bitcoins.testkit.fixtures.BitcoinSFixture
-import org.bitcoins.testkit.rpc.CachedBitcoindV21
+import org.bitcoins.testkit.rpc.CachedBitcoindV23
 import org.scalatest.FutureOutcome
 
 import scala.concurrent.Future
 
 trait TripleLndFixture
     extends BitcoinSFixture
-    with CachedBitcoindV21
+    with CachedBitcoindV23
     with EmbeddedPg {
 
   override type FixtureParam =
