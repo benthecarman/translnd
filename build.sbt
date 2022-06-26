@@ -14,6 +14,8 @@ enablePlugins(ReproducibleBuildsPlugin,
 ThisBuild / sonatypeCredentialHost := "s01.oss.sonatype.org"
 ThisBuild / sonatypeRepository := "https://s01.oss.sonatype.org/service/local"
 
+publish / skip := true
+
 lazy val translnd = project
   .in(file("."))
   .aggregate(

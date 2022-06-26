@@ -22,6 +22,8 @@ ThisBuild / developers := List(
   )
 )
 
+ThisBuild / publish / skip := true
+
 ThisBuild / organization := "com.translnd"
 
 ThisBuild / licenses := List(
