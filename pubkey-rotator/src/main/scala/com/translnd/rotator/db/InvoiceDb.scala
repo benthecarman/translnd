@@ -40,7 +40,7 @@ case class InvoiceDb(
       case Paid =>
         Some((SETTLE, None)) // skip already settled invoices
       case Expired | Cancelled =>
-        Some((FAIL, Some(FailureCode.FINAL_INCORRECT_HTLC_AMOUNT)))
+        Some((FAIL, Some(FailureCode.INCORRECT_OR_UNKNOWN_PAYMENT_DETAILS)))
       case Accepted => None
       case Unpaid =>
         val now = TimeUtil.currentEpochSecond
