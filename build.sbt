@@ -43,7 +43,7 @@ lazy val translnd = project
 lazy val sphinx = project
   .in(file("sphinx"))
   .settings(CommonSettings.settings: _*)
-  .settings(name := "channel-ids", libraryDependencies ++= Deps.sphinx)
+  .settings(name := "sphinx", libraryDependencies ++= Deps.sphinx)
 
 lazy val sphinxTest = project
   .in(file("sphinx-test"))
