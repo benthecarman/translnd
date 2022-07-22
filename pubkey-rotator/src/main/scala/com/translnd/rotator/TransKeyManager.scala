@@ -10,6 +10,7 @@ import org.bitcoins.crypto._
 import org.bitcoins.keymanager._
 
 import java.util.concurrent.atomic.AtomicInteger
+import scala.annotation.tailrec
 import scala.concurrent._
 import scala.concurrent.duration.DurationInt
 
@@ -53,6 +54,24 @@ class TransKeyManager()(implicit
   }
 
   final private[rotator] def nextKey(): (ECPrivateKey, Int) = {
+    config.pubkeyPrefixOpt match {
+      case Some(prefix) =>
+        @tailrec
+        def loop(): (ECPrivateKey, Int) = {
+          val (key, idx) = nextKeyImpl()
+          val pubkey = key.publicKey
+          if (pubkey.hex.startsWith(prefix)) {
+            (key, idx)
+          } else {
+            loop()
+          }
+        }
+        loop()
+      case None => nextKeyImpl()
+    }
+  }
+
+  final private def nextKeyImpl(): (ECPrivateKey, Int) = {
     val idx = counter.getAndIncrement()
     (getKey(idx), idx)
   }
