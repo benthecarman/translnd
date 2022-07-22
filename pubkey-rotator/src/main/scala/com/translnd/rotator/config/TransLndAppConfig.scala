@@ -11,10 +11,11 @@ import org.bitcoins.crypto._
 import org.bitcoins.db._
 import org.bitcoins.keymanager.bip39.BIP39KeyManager
 import org.bitcoins.keymanager.config.KeyManagerAppConfig
+import scodec.bits.ByteVector
 
 import java.nio.file._
 import scala.concurrent._
-import scala.util.Properties
+import scala.util.{Properties, Try}
 
 case class TransLndAppConfig(
     private val directory: Path,
@@ -41,6 +42,26 @@ case class TransLndAppConfig(
 
   /** The path to our encrypted mnemonic seed */
   lazy val seedPath: Path = kmConf.seedPath
+
+  lazy val pubkeyPrefixOpt: Option[String] =
+    config
+      .getStringOrNone(s"$moduleName.pubkey-prefix")
+      .map(_.toLowerCase)
+      .map { prefix =>
+        // validate
+        if (prefix.length > 66) {
+          throw new IllegalArgumentException(
+            s"Pubkey prefix must be <= 66 characters, got: $prefix")
+        } else if (Try(ByteVector.fromValidHex(prefix)).isFailure) {
+          throw new IllegalArgumentException(
+            s"Pubkey prefix must be a valid hex string, got: $prefix")
+        } else if (!prefix.startsWith("02") && !prefix.startsWith("03")) {
+          throw new IllegalArgumentException(
+            s"Pubkey prefix must start with 02 or 03, got: $prefix")
+        } else {
+          prefix
+        }
+      }
 
   override def start(): Future[Unit] = {
     logger.info(s"Initializing setup")
