@@ -5,6 +5,7 @@ import com.translnd.rotator.config._
 import com.typesafe.config.ConfigFactory
 import org.bitcoins.lnd.rpc.config.LndInstanceLocal
 import org.bitcoins.rpc.client.common.BitcoindRpcClient
+import org.bitcoins.testkit.BitcoinSTestAppConfig.ProjectType.Unknown
 import org.bitcoins.testkit.BitcoinSTestAppConfig.configWithEmbeddedDb
 import org.bitcoins.testkit.EmbeddedPg
 import org.bitcoins.testkit.fixtures.BitcoinSFixture
@@ -46,7 +47,9 @@ trait PubkeyRotatorFixture
               case None => ConfigFactory.empty()
             }
 
-            val pg = configWithEmbeddedDb(None, () => pgUrl())
+            val pg =
+              configWithEmbeddedDb(Some(Unknown(TransLndAppConfig.moduleName)),
+                                   () => pgUrl())
             implicit val conf: TransLndAppConfig =
               TransLndAppConfig.fromDatadir(parent,
                                             Vector(pubkeyPrefixConfig, pg))
@@ -57,7 +60,10 @@ trait PubkeyRotatorFixture
       },
       { param =>
         val (_, htlc) = param
+        val config = htlc.config
+
         for {
+          _ <- config.dropAll().map(_ => config.clean())
           _ <- Future.sequence(htlc.lnds.map(_.stop()))
         } yield ()
       }

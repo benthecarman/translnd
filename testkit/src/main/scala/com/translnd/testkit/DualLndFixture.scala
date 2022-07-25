@@ -52,7 +52,10 @@ trait DualLndFixture
       },
       { param =>
         val (_, lndA, htlc) = param
+        val config = htlc.config
+
         for {
+          _ <- config.dropAll().map(_ => config.clean())
           _ <- lndA.stop()
           _ <- lndA.system.terminate()
           _ <- Future.sequence(htlc.lnds.map(_.stop()))

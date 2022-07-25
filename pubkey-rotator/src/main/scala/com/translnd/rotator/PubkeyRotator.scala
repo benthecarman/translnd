@@ -34,7 +34,7 @@ import scala.concurrent.duration._
 import scala.util._
 
 class PubkeyRotator private (val lnds: Vector[LndRpcClient])(implicit
-    conf: TransLndAppConfig,
+    val config: TransLndAppConfig,
     system: ActorSystem)
     extends LndUtils
     with Logging {
