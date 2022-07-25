@@ -42,7 +42,10 @@ trait TripleLndFixture
       },
       { param =>
         val (_, lndA, htlc, lndC) = param
+        val config = htlc.config
+
         for {
+          _ <- config.dropAll().map(_ => config.clean())
           _ <- lndA.stop()
           _ <- lndA.system.terminate()
           _ <- Future.sequence(htlc.lnds.map(_.stop()))
