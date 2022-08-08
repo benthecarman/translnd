@@ -5,4 +5,4 @@
 Translnd allows you to have a rotating pub key for every lightning invoice.
 This is to give the user more privacy when receiving on lightning.
 
-Watch my talk on the topic here: https://youtu.be/gaQ0m1AMpq0?t=7703
+Watch my talk on the topic here: https://www.youtube.com/watch?v=XHr8LPc7IeQ
