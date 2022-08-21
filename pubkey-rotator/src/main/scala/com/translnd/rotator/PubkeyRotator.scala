@@ -221,7 +221,7 @@ class PubkeyRotator private (val lnds: Vector[LndRpcClient])(implicit
       val (queue, source) =
         Source
           .queue[ForwardHtlcInterceptResponse](bufferSize = 200,
-                                               OverflowStrategy.dropHead,
+                                               OverflowStrategy.backpressure,
                                                maxConcurrentOffers = 10)
           .toMat(BroadcastHub.sink)(Keep.both)
           .run()
