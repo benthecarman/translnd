@@ -115,9 +115,9 @@ class PubkeyRotator private (val lnds: Vector[LndRpcClient])(implicit
     dataF.flatMap { case (network, nodeIds) =>
       val (priv, idx) = keyManager.nextKey()
       val hrp = LnHumanReadablePart(network, amount)
-      val preImage = ECPrivateKey.freshPrivateKey.bytes
+      val preImage = CryptoUtil.randomBytes(32)
       val hash = CryptoUtil.sha256(preImage)
-      val paymentSecret = ECPrivateKey.freshPrivateKey.bytes
+      val paymentSecret = CryptoUtil.randomBytes(32)
 
       val hashTag = PaymentHashTag(hash)
       val memoTagOpt = memoOpt.map(DescriptionTag)
