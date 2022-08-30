@@ -412,6 +412,7 @@ object SphinxSpec {
       hex"4545454545454545454545454545454545454545454545454545454545454545")
   )
   val publicKeys: Vector[ECPublicKey] = privKeys.map(_.publicKey)
+
   assert(
     publicKeys == Vector(
       ECPublicKey(

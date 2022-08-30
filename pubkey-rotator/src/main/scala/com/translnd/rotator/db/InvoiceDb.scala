@@ -31,8 +31,8 @@ case class InvoiceDb(
   def getAction(
       req: ForwardHtlcInterceptRequest,
       finalHop: FinalHopTLVStream,
-      scids: Vector[ShortChannelId]): Option[
-    (ResolveHoldForwardAction, Option[FailureCode])] = {
+      scids: Vector[ShortChannelId]): Option[(ResolveHoldForwardAction,
+                                              Option[FailureCode])] = {
     if (Sha256Digest(req.paymentHash) != hash)
       throw new IllegalArgumentException("Payment Hash does not match")
 

@@ -5,14 +5,16 @@ import org.bouncycastle.crypto.engines.ChaCha7539Engine
 import org.bouncycastle.crypto.params.{KeyParameter, ParametersWithIV}
 import scodec.bits.ByteVector
 
-/** Poly1305 authenticator
-  * see https://tools.ietf.org/html/rfc7539#section-2.5
+/** Poly1305 authenticator see https://tools.ietf.org/html/rfc7539#section-2.5
   */
 object Poly1305 {
 
-  /** @param key   input key
-    * @param datas input data
-    * @return a 16 byte authentication tag
+  /** @param key
+    *   input key
+    * @param datas
+    *   input data
+    * @return
+    *   a 16 byte authentication tag
     */
   def mac(key: ByteVector, datas: ByteVector*): ByteVector = {
     val out = new Array[Byte](16)
@@ -24,8 +26,7 @@ object Poly1305 {
   }
 }
 
-/** ChaCha20 block cipher
-  * see https://tools.ietf.org/html/rfc7539#section-2.5
+/** ChaCha20 block cipher see https://tools.ietf.org/html/rfc7539#section-2.5
   */
 object ChaCha20 {
   import ChaCha20Poly1305._
@@ -85,8 +86,8 @@ object ChaCha20 {
   }
 }
 
-/** ChaCha20Poly1305 AEAD (Authenticated Encryption with Additional Data) algorithm
-  * see https://tools.ietf.org/html/rfc7539#section-2.5
+/** ChaCha20Poly1305 AEAD (Authenticated Encryption with Additional Data)
+  * algorithm see https://tools.ietf.org/html/rfc7539#section-2.5
   *
   * This what we should be using (see BOLT #8)
   */
@@ -100,11 +101,16 @@ object ChaCha20Poly1305 {
   case class InvalidCounter() extends ChaCha20Poly1305Error("chacha20 counter must be 0 or 1")
   // @formatter:on
 
-  /** @param key       32 bytes encryption key
-    * @param nonce     12 bytes nonce
-    * @param plaintext plain text
-    * @param aad       additional authentication data. can be empty
-    * @return a (ciphertext, mac) tuple
+  /** @param key
+    *   32 bytes encryption key
+    * @param nonce
+    *   12 bytes nonce
+    * @param plaintext
+    *   plain text
+    * @param aad
+    *   additional authentication data. can be empty
+    * @return
+    *   a (ciphertext, mac) tuple
     */
   def encrypt(
       key: ByteVector,
@@ -125,12 +131,18 @@ object ChaCha20Poly1305 {
     (ciphertext, tag)
   }
 
-  /** @param key        32 bytes decryption key
-    * @param nonce      12 bytes nonce
-    * @param ciphertext ciphertext
-    * @param aad        additional authentication data. can be empty
-    * @param mac        authentication mac
-    * @return the decrypted plaintext if the mac is valid.
+  /** @param key
+    *   32 bytes decryption key
+    * @param nonce
+    *   12 bytes nonce
+    * @param ciphertext
+    *   ciphertext
+    * @param aad
+    *   additional authentication data. can be empty
+    * @param mac
+    *   authentication mac
+    * @return
+    *   the decrypted plaintext if the mac is valid.
     */
   def decrypt(
       key: ByteVector,

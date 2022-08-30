@@ -21,6 +21,7 @@ import org.scalatest.funsuite.AnyFunSuite
 import scodec.bits._
 
 class ChaCha20Poly1305Spec extends AnyFunSuite {
+
   test("Poly1305") {
     // from https://tools.ietf.org/html/rfc7539 ch 2.5.2
     val key: ByteVector =

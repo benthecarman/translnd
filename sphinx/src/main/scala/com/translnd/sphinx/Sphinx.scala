@@ -10,8 +10,9 @@ import scala.util.{Failure, Success, Try}
 
 object Sphinx {
 
-  /** Supported packet version. Note that since this value is outside of the onion encrypted payload, intermediate
-    * nodes may or may not use this value when forwarding the packet to the next node.
+  /** Supported packet version. Note that since this value is outside of the
+    * onion encrypted payload, intermediate nodes may or may not use this value
+    * when forwarding the packet to the next node.
     */
   val Version = 0
 
@@ -54,17 +55,20 @@ object Sphinx {
       blindingFactors: Vector[ByteVector]): ECPublicKey =
     blindingFactors.foldLeft(pub)(blind)
 
-  /** Compute the ephemeral public keys and shared secrets for all nodes on the route.
+  /** Compute the ephemeral public keys and shared secrets for all nodes on the
+    * route.
     *
-    * @param sessionKey this node's session key.
-    * @param pubKeys public keys of each node on the route.
-    * @return a tuple (ephemeral public keys, shared secrets).
+    * @param sessionKey
+    *   this node's session key.
+    * @param pubKeys
+    *   public keys of each node on the route.
+    * @return
+    *   a tuple (ephemeral public keys, shared secrets).
     */
   def computeEphemeralECPublicKeysAndSharedSecrets(
       sessionKey: ECPrivateKey,
-      pubKeys: Vector[ECPublicKey]): (
-      Vector[ECPublicKey],
-      Vector[ECPrivateKey]) = {
+      pubKeys: Vector[ECPublicKey]): (Vector[ECPublicKey],
+                                      Vector[ECPrivateKey]) = {
     val ephemeralECPublicKey0 = blind(CryptoParams.getG, sessionKey.bytes)
     val secret0 = computeSharedSecret(pubKeys.head, sessionKey)
     val blindingFactor0 = computeBlindingFactor(ephemeralECPublicKey0, secret0)
@@ -81,9 +85,8 @@ object Sphinx {
       pubKeys: Vector[ECPublicKey],
       ephemeralECPublicKeys: Vector[ECPublicKey],
       blindingFactors: Vector[ByteVector],
-      sharedSecrets: Vector[ECPrivateKey]): (
-      Vector[ECPublicKey],
-      Vector[ECPrivateKey]) = {
+      sharedSecrets: Vector[ECPrivateKey]): (Vector[ECPublicKey],
+                                             Vector[ECPrivateKey]) = {
     if (pubKeys.isEmpty)
       (ephemeralECPublicKeys, sharedSecrets)
     else {
@@ -119,11 +122,16 @@ object Sphinx {
     }
   }
 
-  /** Decrypting an onion packet yields a payload for the current node and the encrypted packet for the next node.
+  /** Decrypting an onion packet yields a payload for the current node and the
+    * encrypted packet for the next node.
     *
-    * @param payload      decrypted payload for this node.
-    * @param nextPacket   packet for the next node.
-    * @param sharedSecret shared secret for the sending node, which we will need to return failure messages.
+    * @param payload
+    *   decrypted payload for this node.
+    * @param nextPacket
+    *   packet for the next node.
+    * @param sharedSecret
+    *   shared secret for the sending node, which we will need to return failure
+    *   messages.
     */
   case class DecryptedPacket(
       payload: ByteVector,
@@ -156,22 +164,32 @@ object Sphinx {
 
   /** A encrypted onion packet with all the associated shared secrets.
     *
-    * @param packet        encrypted onion packet.
-    * @param sharedSecrets shared secrets (one per node in the route). Known (and needed) only if you're creating the
-    *                      packet. Empty if you're just forwarding the packet to the next node.
+    * @param packet
+    *   encrypted onion packet.
+    * @param sharedSecrets
+    *   shared secrets (one per node in the route). Known (and needed) only if
+    *   you're creating the packet. Empty if you're just forwarding the packet
+    *   to the next node.
     */
   case class PacketAndSecrets(
       packet: OnionRoutingPacket,
       sharedSecrets: Vector[(ECPrivateKey, ECPublicKey)])
 
-  /** Generate a deterministic filler to prevent intermediate nodes from knowing their position in the route.
-    * See https://github.com/lightningnetwork/lightning-rfc/blob/master/04-onion-routing.md#filler-generation
+  /** Generate a deterministic filler to prevent intermediate nodes from knowing
+    * their position in the route. See
+    * https://github.com/lightningnetwork/lightning-rfc/blob/master/04-onion-routing.md#filler-generation
     *
-    * @param keyType             type of key used (depends on the onion we're building).
-    * @param packetPayloadLength length of the packet's encrypted onion payload (e.g. 1300 for standard payment onions).
-    * @param sharedSecrets       shared secrets for all the hops.
-    * @param payloads            payloads for all the hops.
-    * @return filler bytes.
+    * @param keyType
+    *   type of key used (depends on the onion we're building).
+    * @param packetPayloadLength
+    *   length of the packet's encrypted onion payload (e.g. 1300 for standard
+    *   payment onions).
+    * @param sharedSecrets
+    *   shared secrets for all the hops.
+    * @param payloads
+    *   payloads for all the hops.
+    * @return
+    *   filler bytes.
     */
   def generateFiller(
       keyType: String,
@@ -198,16 +216,21 @@ object Sphinx {
       })
   }
 
-  /** Decrypt the incoming packet, extract the per-hop payload and build the packet for the next node.
+  /** Decrypt the incoming packet, extract the per-hop payload and build the
+    * packet for the next node.
     *
-    * @param privateKey     this node's private key.
-    * @param packet         packet received by this node.
-    * @return a DecryptedPacket(payload, packet, shared secret) object where:
-    *         - payload is the per-hop payload for this node.
-    *         - packet is the next packet, to be forwarded using the info that is given in the payload.
-    *         - shared secret is the secret we share with the node that sent the packet. We need it to propagate
-    *           failure messages upstream.
-    *           or a BadOnion error containing the hash of the invalid onion.
+    * @param privateKey
+    *   this node's private key.
+    * @param packet
+    *   packet received by this node.
+    * @return
+    *   a DecryptedPacket(payload, packet, shared secret) object where:
+    *   - payload is the per-hop payload for this node.
+    *   - packet is the next packet, to be forwarded using the info that is
+    *     given in the payload.
+    *   - shared secret is the secret we share with the node that sent the
+    *     packet. We need it to propagate failure messages upstream. or a
+    *     BadOnion error containing the hash of the invalid onion.
     */
   def peel(
       privateKey: ECPrivateKey,
@@ -258,21 +281,29 @@ object Sphinx {
       case _ => Failure(new RuntimeException("Unknown version"))
     }
 
-  /** Wrap the given packet in an additional layer of onion encryption, adding an encrypted payload for a specific
-    * node.
+  /** Wrap the given packet in an additional layer of onion encryption, adding
+    * an encrypted payload for a specific node.
     *
     * Packets are constructed in reverse order:
-    * - you first create the packet for the final recipient
-    * - then you call wrap(...) until you've built the final onion packet that will be sent to the first node in the
-    * route
+    *   - you first create the packet for the final recipient
+    *   - then you call wrap(...) until you've built the final onion packet that
+    *     will be sent to the first node in the route
     *
-    * @param payload            per-hop payload for the target node.
-    * @param associatedData     associated data.
-    * @param ephemeralECPublicKey ephemeral key shared with the target node.
-    * @param sharedSecret       shared secret with this hop.
-    * @param packet             current packet or random bytes if the packet hasn't been initialized.
-    * @param onionPayloadFiller optional onion payload filler, needed only when you're constructing the last packet.
-    * @return the next packet.
+    * @param payload
+    *   per-hop payload for the target node.
+    * @param associatedData
+    *   associated data.
+    * @param ephemeralECPublicKey
+    *   ephemeral key shared with the target node.
+    * @param sharedSecret
+    *   shared secret with this hop.
+    * @param packet
+    *   current packet or random bytes if the packet hasn't been initialized.
+    * @param onionPayloadFiller
+    *   optional onion payload filler, needed only when you're constructing the
+    *   last packet.
+    * @return
+    *   the next packet.
     */
   def wrap(
       payload: ByteVector,
@@ -317,9 +348,8 @@ object Sphinx {
 
   def computeEphemeralPublicKeysAndSharedSecrets(
       sessionKey: ECPrivateKey,
-      publicKeys: Vector[ECPublicKey]): (
-      Vector[ECPublicKey],
-      Vector[ECPrivateKey]) = {
+      publicKeys: Vector[ECPublicKey]): (Vector[ECPublicKey],
+                                         Vector[ECPrivateKey]) = {
     val ephemeralPublicKey0 = blind(CryptoParams.getG, sessionKey.bytes)
     val secret0 = computeSharedSecret(publicKeys.head, sessionKey)
     val blindingFactor0 = computeBlindingFactor(ephemeralPublicKey0, secret0)
@@ -336,9 +366,8 @@ object Sphinx {
       publicKeys: Vector[ECPublicKey],
       ephemeralPublicKeys: Vector[ECPublicKey],
       blindingFactors: Vector[ByteVector],
-      sharedSecrets: Vector[ECPrivateKey]): (
-      Vector[ECPublicKey],
-      Vector[ECPrivateKey]) = {
+      sharedSecrets: Vector[ECPrivateKey]): (Vector[ECPublicKey],
+                                             Vector[ECPrivateKey]) = {
     if (publicKeys.isEmpty)
       (ephemeralPublicKeys, sharedSecrets)
     else {
@@ -356,15 +385,24 @@ object Sphinx {
     }
   }
 
-  /** Create an encrypted onion packet that contains payloads for all nodes in the list.
+  /** Create an encrypted onion packet that contains payloads for all nodes in
+    * the list.
     *
-    * @param sessionKey          session key.
-    * @param packetPayloadLength length of the packet's encrypted onion payload (e.g. 1300 for standard payment onions).
-    * @param pubKeys             node public keys (one per node).
-    * @param payloads            payloads (one per node).
-    * @param associatedData      associated data.
-    * @return An onion packet with all shared secrets. The onion packet can be sent to the first node in the list, and
-    *         the shared secrets (one per node) can be used to parse returned failure messages if needed.
+    * @param sessionKey
+    *   session key.
+    * @param packetPayloadLength
+    *   length of the packet's encrypted onion payload (e.g. 1300 for standard
+    *   payment onions).
+    * @param pubKeys
+    *   node public keys (one per node).
+    * @param payloads
+    *   payloads (one per node).
+    * @param associatedData
+    *   associated data.
+    * @return
+    *   An onion packet with all shared secrets. The onion packet can be sent to
+    *   the first node in the list, and the shared secrets (one per node) can be
+    *   used to parse returned failure messages if needed.
     */
   def create(
       sessionKey: ECPrivateKey,
