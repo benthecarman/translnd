@@ -1,7 +1,5 @@
-import com.typesafe.sbt.packager.Keys._
 import sbt.Keys._
 import sbt._
-import sbtassembly.AssemblyKeys._
 import xerial.sbt.Sonatype.autoImport._
 
 import java.nio.file._
@@ -13,8 +11,6 @@ object CommonSettings {
     scalaVersion := "2.13.8",
     organization := "com.translnd",
     homepage := Some(url("https://github.com/benthecarman/translnd")),
-    maintainer.withRank(
-      KeyRanks.Invisible) := "benthecarman <benthecarman@live.com>",
     developers := List(
       Developer(
         "benthecarman",
@@ -38,18 +34,17 @@ object CommonSettings {
       s == "-Ywarn-unused-import"
         || s == "-Ywarn-unused"
         || s == "-Xfatal-warnings"
-        //for 2.13 -- they use different compiler opts
+        // for 2.13 -- they use different compiler opts
         || s == "-Xlint:unused")),
     Test / console / scalacOptions ++= (Compile / console / scalacOptions).value,
     Test / scalacOptions ++= testCompilerOpts(scalaVersion.value),
     licenses += ("MIT", url("https://opensource.org/licenses/MIT")),
-    assembly / test := {},
     resolvers ++= Resolver.sonatypeOssRepos("snapshots")
   )
 
   private val commonCompilerOpts = {
     List(
-      //https://stackoverflow.com/a/43103038/967713
+      // https://stackoverflow.com/a/43103038/967713
       "-release",
       "8"
     )
@@ -73,14 +68,7 @@ object CommonSettings {
     Seq("-Xfatal-warnings") ++ scala2_13CompilerLinting
   }
 
-  private val nonScala2_13CompilerOpts = Seq(
-    "-Xmax-classfile-name",
-    "128",
-    "-Ywarn-unused",
-    "-Ywarn-unused-import"
-  )
-
-  //https://docs.scala-lang.org/overviews/compiler-options/index.html
+  // https://docs.scala-lang.org/overviews/compiler-options/index.html
   def compilerOpts(scalaVersion: String): Seq[String] = {
     Seq(
       "-unchecked",
@@ -97,20 +85,20 @@ object CommonSettings {
     ) ++ commonCompilerOpts ++ {
       if (scalaVersion.startsWith("2.13")) {
         scala2_13SourceCompilerOpts
-      } else nonScala2_13CompilerOpts
+      } else Seq.empty
     }
   }
 
   def testCompilerOpts(scalaVersion: String): Seq[String] = {
     (commonCompilerOpts ++
-      //initialization checks: https://docs.scala-lang.org/tutorials/FAQ/initialization-order.html
+      // initialization checks: https://docs.scala-lang.org/tutorials/FAQ/initialization-order.html
       Vector("-Xcheckinit") ++
       compilerOpts(scalaVersion))
       .filterNot(_ == "-Xfatal-warnings")
   }
 
   lazy val testSettings: Seq[Setting[_]] = Seq(
-    //show full stack trace (-oF) of failed tests and duration of tests (-oD)
+    // show full stack trace (-oF) of failed tests and duration of tests (-oD)
     Test / testOptions += Tests.Argument(TestFrameworks.ScalaTest, "-oDF"),
     Test / logBuffered := false,
     skip / publish := true

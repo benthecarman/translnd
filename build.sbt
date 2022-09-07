@@ -5,11 +5,7 @@ import scala.concurrent._
 import scala.concurrent.duration.DurationInt
 import scala.util.Properties
 
-enablePlugins(ReproducibleBuildsPlugin,
-              JavaAppPackaging,
-              GraalVMNativeImagePlugin,
-              DockerPlugin,
-              WindowsPlugin)
+enablePlugins(ReproducibleBuildsPlugin)
 
 ThisBuild / sonatypeCredentialHost := "s01.oss.sonatype.org"
 ThisBuild / sonatypeRepository := "https://s01.oss.sonatype.org/service/local"
@@ -288,6 +284,6 @@ TaskKeys.downloadBitcoind := {
     }
   }
 
-  //timeout if we cannot download in 5 minutes
+  // timeout if we cannot download in 5 minutes
   Await.result(Future.sequence(downloads), 5.minutes)
 }
