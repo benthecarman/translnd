@@ -3,7 +3,7 @@ import xerial.sbt.Sonatype.GitHubHosting
 
 import scala.util.Properties
 
-val scala2_13 = "2.13.8"
+val scala2_13 = "2.13.9"
 
 ThisBuild / scmInfo := Some(
   ScmInfo(

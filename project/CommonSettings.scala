@@ -8,7 +8,7 @@ import scala.util.Properties
 object CommonSettings {
 
   lazy val settings: Vector[Setting[_]] = Vector(
-    scalaVersion := "2.13.8",
+    scalaVersion := "2.13.9",
     organization := "com.translnd",
     homepage := Some(url("https://github.com/benthecarman/translnd")),
     developers := List(
