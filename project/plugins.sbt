@@ -1,4 +1,4 @@
-addSbtPlugin("org.xerial.sbt" % "sbt-sonatype" % "3.9.14")
+addSbtPlugin("org.xerial.sbt" % "sbt-sonatype" % "3.9.15")
 
 addSbtPlugin("org.scalameta" % "sbt-scalafmt" % "2.5.0")
 
