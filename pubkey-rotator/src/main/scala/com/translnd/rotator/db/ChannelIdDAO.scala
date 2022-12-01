@@ -20,10 +20,10 @@ case class ChannelIdDAO()(implicit
 
   override val table: TableQuery[ChannelIdTable] = TableQuery[ChannelIdTable]
 
-  def findByHashAction(hash: Sha256Digest): DBIOAction[Vector[ChannelIdDb],
-                                                       NoStream,
-                                                       Effect.Read] = {
-    table.filter(_.hash === hash).result.map(_.toVector)
+  def findByScidAction(scid: ShortChannelId): DBIOAction[Vector[ChannelIdDb],
+                                                         NoStream,
+                                                         Effect.Read] = {
+    table.filter(_.scid === scid).result.map(_.toVector)
   }
 
   class ChannelIdTable(tag: Tag)

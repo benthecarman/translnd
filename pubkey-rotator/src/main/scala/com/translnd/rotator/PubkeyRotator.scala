@@ -12,16 +12,19 @@ import com.translnd.rotator.db._
 import com.translnd.sphinx._
 import grizzled.slf4j.Logging
 import lnrpc.Failure.FailureCode
+import lnrpc.Failure.FailureCode.INCORRECT_OR_UNKNOWN_PAYMENT_DETAILS
 import org.bitcoins.asyncutil.AsyncUtil
 import org.bitcoins.core.config._
 import org.bitcoins.core.currency._
 import org.bitcoins.core.number._
 import org.bitcoins.core.protocol.ln.LnTag._
 import org.bitcoins.core.protocol.ln._
+import org.bitcoins.core.protocol.ln.channel.ShortChannelId
 import org.bitcoins.core.protocol.ln.currency._
 import org.bitcoins.core.protocol.ln.fee._
 import org.bitcoins.core.protocol.ln.node._
 import org.bitcoins.core.protocol.ln.routing._
+import org.bitcoins.core.util.FutureUtil
 import org.bitcoins.crypto._
 import org.bitcoins.lnd.rpc._
 import routerrpc.ResolveHoldForwardAction._
@@ -202,21 +205,24 @@ class PubkeyRotator private (val lnds: Vector[LndRpcClient])(implicit
     invoiceSource
   }
 
-  def readHTLC(
-      hash: Sha256Digest): Future[Option[(InvoiceDb, Vector[ChannelIdDb])]] = {
-    val action = invoiceDAO.findByPrimaryKeyAction(hash).flatMap {
-      case None => DBIO.successful(None)
-      case Some(invoiceDb) =>
-        channelIdDAO.findByHashAction(hash).map { ids =>
-          Some((invoiceDb, ids))
-        }
+  private def readHTLC(
+      chanId: UInt64,
+      hash: Sha256Digest): Future[(Vector[ChannelIdDb], Option[InvoiceDb])] = {
+    val action = for {
+      chanId <- channelIdDAO.findByScidAction(ShortChannelId(chanId))
+      invoiceDbOpt <- invoiceDAO.findByPrimaryKeyAction(hash)
+    } yield invoiceDbOpt match {
+      case Some(db) =>
+        val chanIds = chanId.filter(_.hash == hash)
+        (chanIds, Some(db))
+      case None => (chanId, None)
     }
 
     invoiceDAO.safeDatabase.run(action)
   }
 
   private def start(): PubkeyRotator = {
-    val parallelism = Runtime.getRuntime.availableProcessors()
+    val parallelism = FutureUtil.getParallelism
     val _ = lnds.map { lnd =>
       val (queue, source) =
         Source
@@ -233,15 +239,22 @@ class PubkeyRotator private (val lnds: Vector[LndRpcClient])(implicit
         .mapAsync(parallelism) { request =>
           val ck = request.incomingCircuitKey
           val hash = Sha256Digest(request.paymentHash)
-          readHTLC(hash).flatMap {
-            case None =>
-              // Not our invoice, pass it along
+          readHTLC(request.outgoingRequestedChanId, hash).flatMap {
+            case (chanIds, None) =>
               val resp =
-                ForwardHtlcInterceptResponse(request.incomingCircuitKey,
-                                             ResolveHoldForwardAction.RESUME)
-
+                if (chanIds.isEmpty) {
+                  // Not our invoice, pass it along
+                  ForwardHtlcInterceptResponse(request.incomingCircuitKey,
+                                               ResolveHoldForwardAction.RESUME)
+                } else {
+                  // potential probe
+                  ForwardHtlcInterceptResponse(
+                    request.incomingCircuitKey,
+                    ResolveHoldForwardAction.FAIL,
+                    failureCode = INCORRECT_OR_UNKNOWN_PAYMENT_DETAILS)
+                }
               queue.offer(resp).map(_ => ())
-            case Some((db, scids)) =>
+            case (scids, Some(db)) =>
               val priv = keyManager.getKey(db.index)
               val onionT = SphinxOnionDecoder.decodeT(request.onionBlob)
 
