@@ -3,7 +3,7 @@ import sbt._
 object Deps {
 
   object V {
-    val bitcoinsV = "1.9.6-17-f4fff050-SNAPSHOT"
+    val bitcoinsV = "1.9.7-17-ea5a66a8-SNAPSHOT"
 
     val grizzledSlf4jV = "1.3.4"
   }
