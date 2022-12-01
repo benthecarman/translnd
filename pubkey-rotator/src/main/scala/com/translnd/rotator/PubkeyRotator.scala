@@ -247,6 +247,8 @@ class PubkeyRotator private (val lnds: Vector[LndRpcClient])(implicit
                   ForwardHtlcInterceptResponse(request.incomingCircuitKey,
                                                ResolveHoldForwardAction.RESUME)
                 } else {
+                  logger.info(
+                    "Received potential probe sending INCORRECT_OR_UNKNOWN_PAYMENT_DETAILS")
                   // potential probe
                   ForwardHtlcInterceptResponse(
                     request.incomingCircuitKey,
@@ -285,6 +287,7 @@ class PubkeyRotator private (val lnds: Vector[LndRpcClient])(implicit
                       val updatedDb =
                         db.copy(state = Paid, amountPaidOpt = Some(amtPaid))
                       handleOnInvoicePaid(updatedDb, resp)
+                      logger.info("Settling payment!")
                       Future.successful((resp, updatedDb))
                     case Some((FAIL, errOpt)) =>
                       val resp =
