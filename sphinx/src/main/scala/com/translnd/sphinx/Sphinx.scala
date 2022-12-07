@@ -481,11 +481,11 @@ object Sphinx {
         height: Int): ByteVector = {
       val um = generateKey("um", sharedSecret)
       val failureMsg = hex"400f" ++ msat.toUInt64.bytes ++ UInt32(height).bytes
-      val mac = CryptoUtil.hmac256(um, failureMsg)
+      val hmac = mac(um, failureMsg)
       val padLen = MaxPayloadLength - failureMsg.length
       require(padLen >= 0, s"failure message is too long: ${failureMsg.length}")
       val packet =
-        mac ++ UInt16(failureMsg.length).bytes ++ failureMsg ++ UInt16(
+        hmac.bytes ++ UInt16(failureMsg.length).bytes ++ failureMsg ++ UInt16(
           padLen).bytes ++ ByteVector.low(padLen)
       wrap(packet, sharedSecret)
     }
