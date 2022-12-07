@@ -2,8 +2,8 @@ package com.translnd.rotator.db
 
 import com.translnd.rotator.InvoiceState
 import com.translnd.rotator.InvoiceState._
-import com.translnd.sphinx.FinalHopTLVStream
-import lnrpc.Failure.FailureCode
+import com.translnd.sphinx.Sphinx
+import com.translnd.sphinx.Sphinx.DecryptedPacket
 import org.bitcoins.core.protocol.ln._
 import org.bitcoins.core.protocol.ln.channel.ShortChannelId
 import org.bitcoins.core.protocol.ln.currency._
@@ -30,17 +30,25 @@ case class InvoiceDb(
   /** Returns what action to */
   def getAction(
       req: ForwardHtlcInterceptRequest,
-      finalHop: FinalHopTLVStream,
+      packet: DecryptedPacket,
+      height: Int,
       scids: Vector[ShortChannelId]): Option[(ResolveHoldForwardAction,
-                                              Option[FailureCode])] = {
+                                              Option[ByteVector])] = {
     if (Sha256Digest(req.paymentHash) != hash)
       throw new IllegalArgumentException("Payment Hash does not match")
+
+    val finalHop = packet.finalHopTLVStream
+
+    lazy val failureMsg = Sphinx.FailurePacket.incorrectOrUnknownPaymentDetails(
+      packet.sharedSecret,
+      MilliSatoshis(req.outgoingAmountMsat.toBigInt),
+      height)
 
     state match {
       case Paid =>
         Some((SETTLE, None)) // skip already settled invoices
       case Expired | Cancelled =>
-        Some((FAIL, Some(FailureCode.INCORRECT_OR_UNKNOWN_PAYMENT_DETAILS)))
+        Some((FAIL, Some(failureMsg)))
       case Accepted => None
       case Unpaid =>
         val now = TimeUtil.currentEpochSecond
@@ -58,13 +66,13 @@ case class InvoiceDb(
         val expired = expireTimeOpt.exists(_ < now)
 
         if (!correctAmt) {
-          Some((FAIL, Some(FailureCode.FINAL_INCORRECT_HTLC_AMOUNT)))
+          Some((FAIL, Some(failureMsg)))
         } else if (!correctSecret) {
-          Some((FAIL, Some(FailureCode.INCORRECT_OR_UNKNOWN_PAYMENT_DETAILS)))
+          Some((FAIL, Some(failureMsg)))
         } else if (!correctChanId) {
-          Some((FAIL, Some(FailureCode.INCORRECT_OR_UNKNOWN_PAYMENT_DETAILS)))
+          Some((FAIL, Some(failureMsg)))
         } else if (expired) {
-          Some((FAIL, Some(FailureCode.INCORRECT_OR_UNKNOWN_PAYMENT_DETAILS)))
+          Some((FAIL, Some(failureMsg)))
         } else if (wholeAmount) {
           Some((SETTLE, None))
         } else None

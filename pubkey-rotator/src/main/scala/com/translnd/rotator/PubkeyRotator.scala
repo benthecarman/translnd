@@ -5,6 +5,7 @@ import akka.actor.ActorSystem
 import akka.stream._
 import akka.stream.scaladsl._
 import com.google.common.util.concurrent.AtomicLongMap
+import com.google.protobuf.ByteString
 import com.translnd.channel.ids.ExistingChannelId
 import com.translnd.rotator.InvoiceState._
 import com.translnd.rotator.config._
@@ -32,6 +33,7 @@ import routerrpc._
 import scodec.bits._
 import slick.dbio.DBIO
 
+import java.util.concurrent.atomic.AtomicInteger
 import scala.concurrent._
 import scala.concurrent.duration._
 import scala.util._
@@ -205,6 +207,8 @@ class PubkeyRotator private (val lnds: Vector[LndRpcClient])(implicit
     invoiceSource
   }
 
+  private val height: AtomicInteger = new AtomicInteger(0)
+
   private def readHTLC(
       chanId: UInt64,
       hash: Sha256Digest): Future[(Vector[ChannelIdDb], Option[InvoiceDb])] = {
@@ -223,6 +227,9 @@ class PubkeyRotator private (val lnds: Vector[LndRpcClient])(implicit
 
   private def start(): PubkeyRotator = {
     val parallelism = FutureUtil.getParallelism
+
+    lnds.head.getInfo.map(info => height.set(info.blockHeight.toInt))
+
     val _ = lnds.map { lnd =>
       val (queue, source) =
         Source
@@ -272,9 +279,11 @@ class PubkeyRotator private (val lnds: Vector[LndRpcClient])(implicit
                       failureCode = FailureCode.INVALID_ONION_HMAC)
                   Future.successful((resp, db))
                 case Success(decrypted) =>
-                  val actionOpt = db.getAction(request,
-                                               decrypted.finalHopTLVStream,
-                                               scids.map(_.scid))
+                  val actionOpt =
+                    db.getAction(request,
+                                 decrypted,
+                                 height.get(),
+                                 scids.map(_.scid))
 
                   actionOpt match {
                     case Some((SETTLE, _)) =>
@@ -290,11 +299,13 @@ class PubkeyRotator private (val lnds: Vector[LndRpcClient])(implicit
                       logger.info("Settling payment!")
                       Future.successful((resp, updatedDb))
                     case Some((FAIL, errOpt)) =>
+                      val failureMessage = errOpt.getOrElse(ByteVector.empty)
                       val resp =
                         ForwardHtlcInterceptResponse(
                           incomingCircuitKey = ck,
                           action = FAIL,
-                          failureCode = errOpt.getOrElse(FailureCode.RESERVED))
+                          failureMessage =
+                            ByteString.copyFrom(failureMessage.toArray))
                       Future.successful((resp, db))
                     case Some((RESUME, _)) =>
                       val resp =
@@ -302,12 +313,14 @@ class PubkeyRotator private (val lnds: Vector[LndRpcClient])(implicit
                                                      action = RESUME)
                       Future.successful((resp, db))
                     case Some((action: Unrecognized, errOpt)) =>
+                      val failureMessage = errOpt.getOrElse(ByteVector.empty)
                       val resp =
                         ForwardHtlcInterceptResponse(
                           incomingCircuitKey = ck,
                           action = action,
                           preimage = db.preimage,
-                          failureCode = errOpt.getOrElse(FailureCode.RESERVED))
+                          failureMessage =
+                            ByteString.copyFrom(failureMessage.toArray))
                       Future.successful((resp, db))
                     case None =>
                       // Update paymentMap to have new payment
@@ -382,6 +395,12 @@ class PubkeyRotator private (val lnds: Vector[LndRpcClient])(implicit
       val _ = invoiceDAO.markInvoicesExpired().map { dbs =>
         dbs.map(invoiceQueue.offer)
       }
+    }
+
+    // start height setter
+    system.scheduler.scheduleAtFixedRate(1.minute, 1.minute) { () =>
+      lnds.head.getInfo.map(info => height.set(info.blockHeight.toInt))
+      ()
     }
     this
   }

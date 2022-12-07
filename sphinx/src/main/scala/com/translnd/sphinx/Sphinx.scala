@@ -1,9 +1,11 @@
 package com.translnd.sphinx
 
+import org.bitcoins.core.number._
 import org.bitcoins.core.protocol.BigSizeUInt
+import org.bitcoins.core.protocol.ln.currency.MilliSatoshis
 import org.bitcoins.core.protocol.tlv.TLV
 import org.bitcoins.crypto._
-import scodec.bits.ByteVector
+import scodec.bits._
 
 import scala.annotation.tailrec
 import scala.util.{Failure, Success, Try}
@@ -454,5 +456,58 @@ object Sphinx {
                       sharedSecrets.dropRight(1),
                       lastPacket)
     PacketAndSecrets(packet, sharedSecrets.zip(pubKeys))
+  }
+
+  object FailurePacket {
+
+    val MaxPayloadLength = 256
+    val PacketLength: Int = MacLength + MaxPayloadLength + 2 + 2
+
+    /** Create a failure packet that will be returned to the sender. Each
+      * intermediate hop will add a layer of encryption and forward to the
+      * previous hop. Note that malicious intermediate hops may drop the packet
+      * or alter it (which breaks the mac).
+      *
+      * @param sharedSecret
+      *   destination node's shared secret that was computed when the original
+      *   onion for the HTLC was created or forwarded: see OnionPacket.create()
+      *   and OnionPacket.wrap().
+      * @return
+      *   a failure packet that can be sent to the destination node.
+      */
+    def incorrectOrUnknownPaymentDetails(
+        sharedSecret: ECPrivateKey,
+        msat: MilliSatoshis,
+        height: Int): ByteVector = {
+      val um = generateKey("um", sharedSecret)
+      val failureMsg = hex"400f" ++ msat.toUInt64.bytes ++ UInt32(height).bytes
+      val mac = CryptoUtil.hmac256(um, failureMsg)
+      val padLen = MaxPayloadLength - failureMsg.length
+      require(padLen >= 0, s"failure message is too long: ${failureMsg.length}")
+      val packet =
+        mac ++ UInt16(failureMsg.length).bytes ++ failureMsg ++ UInt16(
+          padLen).bytes ++ ByteVector.low(padLen)
+      wrap(packet, sharedSecret)
+    }
+
+    /** Wrap the given packet in an additional layer of onion encryption for the
+      * previous hop.
+      *
+      * @param packet
+      *   failure packet.
+      * @param sharedSecret
+      *   destination node's shared secret.
+      * @return
+      *   an encrypted failure packet that can be sent to the destination node.
+      */
+    def wrap(packet: ByteVector, sharedSecret: ECPrivateKey): ByteVector = {
+      val key = generateKey("ammag", sharedSecret)
+      val stream = generateStream(key, PacketLength)
+      // If we received a packet with an invalid length, we trim and pad to forward a packet with a normal length upstream.
+      // This is a poor man's attempt at increasing the likelihood of the sender receiving the error.
+      packet.take(PacketLength).padLeft(PacketLength) xor stream
+    }
+
+    // I deleted the decrypt method because it's not used in the codebase
   }
 }
