@@ -10,10 +10,10 @@ import com.translnd.channel.ids.ExistingChannelId
 import com.translnd.rotator.InvoiceState._
 import com.translnd.rotator.config._
 import com.translnd.rotator.db._
+import com.translnd.sphinx.Sphinx.DecryptedPacket
 import com.translnd.sphinx._
 import grizzled.slf4j.Logging
 import lnrpc.Failure.FailureCode
-import lnrpc.Failure.FailureCode.INCORRECT_OR_UNKNOWN_PAYMENT_DETAILS
 import org.bitcoins.asyncutil.AsyncUtil
 import org.bitcoins.core.config._
 import org.bitcoins.core.currency._
@@ -211,15 +211,16 @@ class PubkeyRotator private (val lnds: Vector[LndRpcClient])(implicit
 
   private def readHTLC(
       chanId: UInt64,
-      hash: Sha256Digest): Future[(Vector[ChannelIdDb], Option[InvoiceDb])] = {
+      hash: Sha256Digest): Future[HTLCDbInfo] = {
     val action = for {
       chanId <- channelIdDAO.findByScidAction(ShortChannelId(chanId))
-      invoiceDbOpt <- invoiceDAO.findByPrimaryKeyAction(hash)
-    } yield invoiceDbOpt match {
-      case Some(db) =>
-        val chanIds = chanId.filter(_.hash == hash)
-        (chanIds, Some(db))
-      case None => (chanId, None)
+      invoiceDbs <- invoiceDAO.findByPrimaryKeysAction(
+        chanId.map(_.hash) :+ hash)
+    } yield {
+      invoiceDbs.find(_.hash == hash) match {
+        case Some(invoiceDb) => Payment(chanId, invoiceDb)
+        case None            => Probe(chanId, invoiceDbs)
+      }
     }
 
     invoiceDAO.safeDatabase.run(action)
@@ -247,7 +248,7 @@ class PubkeyRotator private (val lnds: Vector[LndRpcClient])(implicit
           val ck = request.incomingCircuitKey
           val hash = Sha256Digest(request.paymentHash)
           readHTLC(request.outgoingRequestedChanId, hash).flatMap {
-            case (chanIds, None) =>
+            case Probe(chanIds, invoiceDbs) =>
               val resp =
                 if (chanIds.isEmpty) {
                   // Not our invoice, pass it along
@@ -256,14 +257,39 @@ class PubkeyRotator private (val lnds: Vector[LndRpcClient])(implicit
                 } else {
                   logger.info(
                     "Received potential probe sending INCORRECT_OR_UNKNOWN_PAYMENT_DETAILS")
-                  // potential probe
-                  ForwardHtlcInterceptResponse(
-                    request.incomingCircuitKey,
-                    ResolveHoldForwardAction.FAIL,
-                    failureCode = INCORRECT_OR_UNKNOWN_PAYMENT_DETAILS)
+                  val init: Option[DecryptedPacket] = None
+                  val packetOpt = invoiceDbs.foldLeft(init) { case (ret, db) =>
+                    if (ret.isDefined) ret
+                    else {
+                      val priv = keyManager.getKey(db.index)
+                      val onionT = SphinxOnionDecoder.decodeT(request.onionBlob)
+
+                      onionT.flatMap(Sphinx.peel(priv, Some(hash), _)).toOption
+                    }
+                  }
+
+                  packetOpt match {
+                    case Some(packet) =>
+                      // potential probe, fail properly
+                      val failureMsg =
+                        Sphinx.FailurePacket.incorrectOrUnknownPaymentDetails(
+                          packet.sharedSecret,
+                          MilliSatoshis(request.outgoingAmountMsat.toBigInt),
+                          height.get())
+                      ForwardHtlcInterceptResponse(
+                        request.incomingCircuitKey,
+                        ResolveHoldForwardAction.FAIL,
+                        failureMessage =
+                          ByteString.copyFrom(failureMsg.toArray))
+                    case None =>
+                      // Unknown invoice, pass it along
+                      ForwardHtlcInterceptResponse(
+                        request.incomingCircuitKey,
+                        ResolveHoldForwardAction.RESUME)
+                  }
                 }
               queue.offer(resp).map(_ => ())
-            case (scids, Some(db)) =>
+            case Payment(scids, db) =>
               val priv = keyManager.getKey(db.index)
               val onionT = SphinxOnionDecoder.decodeT(request.onionBlob)
 
