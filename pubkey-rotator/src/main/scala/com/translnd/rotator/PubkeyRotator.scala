@@ -255,8 +255,6 @@ class PubkeyRotator private (val lnds: Vector[LndRpcClient])(implicit
                   ForwardHtlcInterceptResponse(request.incomingCircuitKey,
                                                ResolveHoldForwardAction.RESUME)
                 } else {
-                  logger.info(
-                    "Received potential probe sending INCORRECT_OR_UNKNOWN_PAYMENT_DETAILS")
                   val init: Option[DecryptedPacket] = None
                   val packetOpt = invoiceDbs.foldLeft(init) { case (ret, db) =>
                     if (ret.isDefined) ret
@@ -271,6 +269,8 @@ class PubkeyRotator private (val lnds: Vector[LndRpcClient])(implicit
                   packetOpt match {
                     case Some(packet) =>
                       // potential probe, fail properly
+                      logger.info(
+                        "Received potential probe sending INCORRECT_OR_UNKNOWN_PAYMENT_DETAILS")
                       val failureMsg =
                         Sphinx.FailurePacket.incorrectOrUnknownPaymentDetails(
                           packet.sharedSecret,
@@ -282,6 +282,8 @@ class PubkeyRotator private (val lnds: Vector[LndRpcClient])(implicit
                         failureMessage =
                           ByteString.copyFrom(failureMsg.toArray))
                     case None =>
+                      logger.info(
+                        "Received potential payment for our fake channel, but cannot find decrypt packet, Resuming...")
                       // Unknown invoice, pass it along
                       ForwardHtlcInterceptResponse(
                         request.incomingCircuitKey,
