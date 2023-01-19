@@ -247,9 +247,9 @@ TaskKeys.downloadBitcoind := {
           else if (Properties.isMac)
             Map(
               "24.0" -> (if (System.getProperty("os.arch") == "aarch64")
-                "03cbad3118ead19de6664ab80c43b6ee97302109e8789ca9a7e261bdc0aa6937"
-              else
-                "a2b7ba863e5536249a8e97b464bc9a91ad73a0b6340434bf1c09aa912ac52f29"),
+                           "03cbad3118ead19de6664ab80c43b6ee97302109e8789ca9a7e261bdc0aa6937"
+                         else
+                           "a2b7ba863e5536249a8e97b464bc9a91ad73a0b6340434bf1c09aa912ac52f29"),
               "23.0" -> (if (System.getProperty("os.arch") == "aarch64")
                            "7c8bc63731aa872b7b334a8a7d96e33536ad77d49029bad179b09dca32cd77ac"
                          else
@@ -293,6 +293,6 @@ TaskKeys.downloadBitcoind := {
     }
   }
 
-  //timeout if we cannot download in 5 minutes
+  // timeout if we cannot download in 5 minutes
   Await.result(Future.sequence(downloads), 5.minutes)
 }
